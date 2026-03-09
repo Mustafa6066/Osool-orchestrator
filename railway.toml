@@ -1,0 +1,17 @@
+# Railway Configuration for Osool Orchestrator API
+# ==================================================
+# Primary service: Fastify REST API + BullMQ workers
+# Uses the multi-stage Dockerfile at repo root.
+#
+# Required add-ons: PostgreSQL, Redis
+# Required env vars: See RAILWAY_ENV_TEMPLATE.txt
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

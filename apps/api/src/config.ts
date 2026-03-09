@@ -34,7 +34,7 @@ const schema = z.object({
   API_KEY: z.string().min(16, 'API_KEY must be at least 16 characters').optional(),
 
   // CORS origins (comma-separated)
-  ALLOWED_ORIGINS: z.string().default('https://osool-ten.vercel.app,http://localhost:3000'),
+  ALLOWED_ORIGINS: z.string().default('https://osool-ten.vercel.app,http://localhost:3000,http://localhost:5173,http://localhost:3001'),
 
   // Meta Ads (optional)
   META_APP_ID: z.string().optional(),

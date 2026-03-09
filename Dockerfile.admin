@@ -11,6 +11,11 @@ RUN pnpm install --frozen-lockfile --prod=false
 
 # ── Build ────────────────────────────────────────────────────────────────────
 FROM deps AS build
+
+# Allow Railway to inject the API URL at build time
+ARG VITE_API_URL=http://localhost:4000
+ENV VITE_API_URL=$VITE_API_URL
+
 COPY tsconfig.base.json ./
 COPY packages/shared/ packages/shared/
 COPY apps/admin/ apps/admin/
