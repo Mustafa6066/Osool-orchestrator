@@ -44,9 +44,10 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const status = dbStatus === 'healthy' && redisStatus === 'healthy' ? 'ok' : 'degraded';
-      const code = status === 'ok' ? 200 : 503;
 
-      return reply.status(code).send({
+      // Always return 200 for liveness (Railway healthcheck).
+      // Body indicates actual readiness status.
+      return reply.status(200).send({
         status,
         timestamp: new Date().toISOString(),
         db: dbStatus,
