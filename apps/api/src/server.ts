@@ -16,7 +16,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 
 import { getConfig, getAllowedOrigins } from './config.js';
-import { getRedis } from './lib/redis.js';
+import { getRedis, isRedisConfigured } from './lib/redis.js';
 import { webhookRoutes } from './routes/webhook.routes.js';
 import { dataRoutes } from './routes/data.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
@@ -51,7 +51,7 @@ async function build() {
   /* ── Rate limiting ─────────────────────────────────────────────────────── */
   await app.register(rateLimit, {
     global: false,
-    redis: getRedis(),
+    ...(isRedisConfigured() ? { redis: getRedis() } : {}),
     keyGenerator: (req) => req.ip,
   });
 

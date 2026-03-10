@@ -7,13 +7,18 @@ import { getConfig } from '../config.js';
 
 let redis: Redis | null = null;
 
+export function isRedisConfigured(): boolean {
+  const url = getConfig().REDIS_URL;
+  return !url.includes('localhost') && !url.includes('127.0.0.1');
+}
+
 export function getRedis(): Redis {
   if (!redis) {
     const cfg = getConfig();
     redis = new Redis(cfg.REDIS_URL, {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
-      lazyConnect: false,
+      lazyConnect: true,
     });
 
     redis.on('error', (err) => {
