@@ -9,16 +9,6 @@ import { db } from '@osool/db';
 import { sql } from 'drizzle-orm';
 
 export const healthRoutes: FastifyPluginAsync = async (app) => {
-  // Root handler — returns API info
-  app.get('/', async (_req, reply) => {
-    return reply.status(200).send({
-      name: 'Osool Orchestrator API',
-      version: '1.0.0',
-      docs: '/docs',
-      health: '/health',
-    });
-  });
-
   app.get(
     '/health',
     {

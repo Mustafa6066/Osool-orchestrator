@@ -80,6 +80,16 @@ async function build() {
   });
 
   /* ── Routes ────────────────────────────────────────────────────────────── */
+  // Root handler — registered directly to avoid prefix resolution issues
+  app.get('/', async (_req, reply) => {
+    return reply.status(200).send({
+      name: 'Osool Orchestrator API',
+      version: '1.0.0',
+      docs: '/docs',
+      health: '/health',
+    });
+  });
+
   await app.register(healthRoutes, { prefix: '/' });
   await app.register(webhookRoutes, { prefix: '/webhooks' });
   await app.register(dataRoutes, { prefix: '/data' });
