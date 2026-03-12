@@ -1,7 +1,7 @@
 # Railway Configuration for @osool/admin (Vite SPA served via nginx)
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.admin"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 healthcheckPath = "/health"
