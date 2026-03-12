@@ -64,8 +64,8 @@ export function DashboardPage() {
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-xl font-semibold text-zinc-100">Dashboard</h1>
         <div className="flex items-center gap-4 text-zinc-500">
-          <span className="flex items-center gap-2 text-xs"><StatusDot ok={sys.dbStatus === 'ok'} /> DB</span>
-          <span className="flex items-center gap-2 text-xs"><StatusDot ok={sys.redisStatus === 'ok'} /> Redis</span>
+          <span className="flex items-center gap-2 text-xs"><StatusDot ok={sys.dbStatus === 'healthy'} /> DB</span>
+          <span className="flex items-center gap-2 text-xs"><StatusDot ok={sys.redisStatus === 'healthy'} /> Redis</span>
           <span className="text-xs">Queue: {sys.queueDepth}</span>
         </div>
       </div>
@@ -132,7 +132,7 @@ export function DashboardPage() {
           {Object.entries(sys.lastAgentRun).map(([name, ts]) => (
             <div key={name}>
               <p className="text-xs text-zinc-500 capitalize mb-0.5">{name.replace(/([A-Z])/g, ' $1').trim()}</p>
-              <p className="text-xs text-zinc-300 font-medium">{ts ? new Date(ts).toLocaleString() : '—'}</p>
+              <p className="text-xs text-zinc-300 font-medium">{(() => { const d = new Date(ts); return ts && ts !== 'never' && !isNaN(d.getTime()) ? d.toLocaleString() : '—'; })()}</p>
             </div>
           ))}
         </div>
