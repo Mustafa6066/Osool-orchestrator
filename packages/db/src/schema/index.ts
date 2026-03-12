@@ -1,22 +1,22 @@
-export { users } from './users';
+export { users } from './users.js';
 export {
   developers,
   properties,
-} from './properties';
+} from './properties.js';
 export {
   keywords,
   seoPages,
   seoContent,
-} from './seo';
+} from './seo.js';
 export {
   chatSessions,
   chatMessages,
-} from './chat';
+} from './chat.js';
 export {
   campaigns,
   campaignMetrics,
   retargetingAudiences,
-} from './campaigns';
+} from './campaigns.js';
 export {
   funnelEvents,
   emailSequences,
@@ -24,4 +24,4 @@ export {
   waitlist,
   feedbackLoopEvents,
   intentSignals,
-} from './funnel';
+} from './funnel.js';
