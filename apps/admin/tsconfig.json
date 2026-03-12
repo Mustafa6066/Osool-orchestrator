@@ -12,6 +12,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "types": ["vite/client"],
     "jsx": "react-jsx",
     "lib": ["dom", "dom.iterable", "ES2022"],
     "paths": {
