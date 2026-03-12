@@ -29,6 +29,9 @@ const schema = z.object({
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD_HASH: z.string().optional(),
 
+  // Osool backend URL (used to proxy admin login)
+  OSOOL_API_URL: z.string().url().default('https://osool-production.up.railway.app'),
+
   // Webhook + Data API security
   WEBHOOK_SECRET: z.string().min(16, 'WEBHOOK_SECRET must be at least 16 characters').optional(),
   API_KEY: z.string().min(16, 'API_KEY must be at least 16 characters').optional(),

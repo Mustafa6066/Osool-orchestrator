@@ -89,11 +89,42 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const cfg = getConfig();
+
+      // Primary: proxy to Osool backend and verify admin role
+      try {
+        const osoolRes = await fetch(`${cfg.OSOOL_API_URL}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ username: email, password }),
+        });
+
+        if (osoolRes.ok) {
+          const data = await osoolRes.json() as { access_token?: string };
+          if (data.access_token) {
+            // Decode JWT payload to check role (token just issued by Osool backend — trusted)
+            const payloadB64 = data.access_token.split('.')[1];
+            const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString()) as { role?: string };
+            if (payload.role !== 'admin') {
+              return reply.status(403).send({ error: 'Admin access required' });
+            }
+            return reply.send({
+              accessToken: signAccessToken(email),
+              refreshToken: signRefreshToken(email),
+              expiresIn: 1800,
+            });
+          }
+        } else if (osoolRes.status === 401) {
+          return reply.status(401).send({ error: 'Invalid credentials' });
+        }
+      } catch {
+        // Osool backend unreachable — fall through to local fallback
+      }
+
+      // Fallback: local ADMIN_EMAIL + ADMIN_PASSWORD_HASH env vars
       const expectedEmail = cfg.ADMIN_EMAIL;
       const expectedHash = cfg.ADMIN_PASSWORD_HASH;
 
       if (!expectedEmail || !expectedHash) {
-        // Dev mode: allow any login with default credentials
         if (cfg.NODE_ENV !== 'development') {
           return reply.status(503).send({ error: 'Auth not configured' });
         }
