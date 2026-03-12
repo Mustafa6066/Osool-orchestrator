@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getCampaigns, toggleCampaign } from '../api/client';
 import { usePolling } from '../hooks/usePolling';
+import { RotateCw } from 'lucide-react';
 
 type Campaign = {
   id: string;
@@ -51,14 +52,15 @@ export function CampaignsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">Campaigns</h2>
-          <p className="text-sm text-gray-400 mt-1">{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</p>
+          <h2 className="text-xl font-semibold text-zinc-100">Campaigns</h2>
+          <p className="text-xs text-zinc-500 mt-1">{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</p>
         </div>
         <button
           onClick={refresh}
-          className="px-4 py-2 bg-surface-card border border-border text-sm text-gray-300 rounded-lg hover:bg-surface-hover transition-colors"
+          className="flex items-center gap-2 px-3 py-2 bg-surface-card border border-border text-xs text-zinc-400 rounded-lg hover:text-zinc-100 hover:bg-surface-hover"
         >
-          ↻ Refresh
+          <RotateCw size={13} />
+          Refresh
         </button>
       </div>
 
@@ -72,15 +74,15 @@ export function CampaignsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Name</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Platform</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Type</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Budget</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Spent</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Impressions</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Clicks</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">CVR</th>
-              <th className="text-center px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Active</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Name</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Platform</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Type</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Budget</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Spent</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Impressions</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Clicks</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">CVR</th>
+              <th className="text-center px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Active</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -100,28 +102,28 @@ export function CampaignsPage() {
                 : '—';
               return (
                 <tr key={c.id} className="hover:bg-surface-hover transition-colors">
-                  <td className="px-6 py-4 font-medium text-gray-200">{c.name}</td>
-                  <td className="px-6 py-4 text-gray-400 capitalize">{c.platform}</td>
-                  <td className="px-6 py-4 text-gray-400 capitalize">{c.type}</td>
-                  <td className="px-6 py-4 text-right text-gray-300">
+                  <td className="px-6 py-4 font-medium text-zinc-200">{c.name}</td>
+                  <td className="px-6 py-4 text-zinc-400 capitalize">{c.platform}</td>
+                  <td className="px-6 py-4 text-zinc-400 capitalize">{c.type}</td>
+                  <td className="px-6 py-4 text-right text-zinc-300">
                     {c.budget ? `$${c.budget.toLocaleString()}` : '—'}
                   </td>
-                  <td className="px-6 py-4 text-right text-gray-300">
+                  <td className="px-6 py-4 text-right text-zinc-300">
                     {c.spent ? `$${c.spent.toLocaleString()}` : '—'}
                   </td>
-                  <td className="px-6 py-4 text-right text-gray-300">
+                  <td className="px-6 py-4 text-right text-zinc-300">
                     {c.impressions?.toLocaleString() ?? '—'}
                   </td>
-                  <td className="px-6 py-4 text-right text-gray-300">
+                  <td className="px-6 py-4 text-right text-zinc-300">
                     {c.clicks?.toLocaleString() ?? '—'}
                   </td>
-                  <td className="px-6 py-4 text-right text-gray-300">{cvr}</td>
+                  <td className="px-6 py-4 text-right text-zinc-300">{cvr}</td>
                   <td className="px-6 py-4 text-center">
                     <button
                       disabled={toggling.has(c.id)}
                       onClick={() => handleToggle(c.id, c.active)}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${
-                        c.active ? 'bg-green-500' : 'bg-gray-300'
+                        c.active ? 'bg-green-500' : 'bg-zinc-300'
                       }`}
                     >
                       <span
@@ -136,7 +138,7 @@ export function CampaignsPage() {
             })}
             {!loading && campaigns.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
                   No campaigns found
                 </td>
               </tr>

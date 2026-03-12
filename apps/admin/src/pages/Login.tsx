@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -25,59 +26,76 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+    <div className="min-h-screen bg-surface flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white">
-            Osool<span className="text-yellow-400">.</span>
-          </h1>
-          <p className="text-gray-400 mt-1 text-sm">Admin Dashboard</p>
+        {/* Logo */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-12 h-12 rounded-2xl bg-brand-500 flex items-center justify-center mb-4 shadow-lg shadow-brand-500/20">
+            <span className="text-white font-bold text-xl">O</span>
+          </div>
+          <h1 className="text-xl font-semibold text-zinc-100">Osool Admin</h1>
+          <p className="text-sm text-zinc-500 mt-1">Sign in to continue</p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="bg-gray-900 rounded-xl border border-white/10 p-8 space-y-5"
-        >
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg px-4 py-3">
-              {error}
+            <div className="flex items-start gap-3 bg-red-500/8 border border-red-500/20 text-red-400 text-sm rounded-xl px-4 py-3">
+              <AlertCircle size={15} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1.5">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-gray-800 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50"
-              placeholder="admin@osool.ai"
-              autoComplete="email"
-            />
+            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Email address</label>
+            <div className="relative">
+              <Mail size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-surface-card border border-border rounded-lg pl-9 pr-4 py-2.5 text-zinc-100 text-sm placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/50"
+                placeholder="admin@osool.ai"
+                autoComplete="email"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1.5">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-gray-800 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50"
-              placeholder="••••••••"
-              autoComplete="current-password"
-            />
+            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Password</label>
+            <div className="relative">
+              <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-surface-card border border-border rounded-lg pl-9 pr-4 py-2.5 text-zinc-100 text-sm placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/50"
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 text-gray-900 font-semibold rounded-lg py-2.5 text-sm transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium rounded-lg py-2.5 text-sm shadow-lg shadow-brand-500/20"
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? (
+              <span>Signing in…</span>
+            ) : (
+              <>
+                <span>Sign in</span>
+                <ArrowRight size={14} />
+              </>
+            )}
           </button>
         </form>
+
+        <p className="text-center text-xs text-zinc-600 mt-8">
+          Osool Real Estate &mdash; Internal Admin
+        </p>
       </div>
     </div>
   );

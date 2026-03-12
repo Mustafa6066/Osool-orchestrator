@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getKeywords } from '../api/client';
 import { usePolling } from '../hooks/usePolling';
+import { RotateCw, Search } from 'lucide-react';
 
 type Keyword = {
   id: string;
@@ -29,7 +30,7 @@ function DifficultyBar({ value }: { value: number }) {
       <div className="flex-1 bg-border rounded-full h-1.5">
         <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${value}%` }} />
       </div>
-      <span className="text-xs text-gray-400 w-6 text-right">{value}</span>
+      <span className="text-xs text-zinc-400 w-6 text-right">{value}</span>
     </div>
   );
 }
@@ -52,8 +53,8 @@ export function KeywordsPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Keyword Intelligence</h1>
-          <p className="text-sm text-gray-400 mt-1">{total} tracked keywords</p>
+          <h1 className="text-xl font-semibold text-zinc-100">Keyword Intelligence</h1>
+          <p className="text-xs text-zinc-500 mt-1">{total} tracked keywords</p>
         </div>
         <div className="flex items-center gap-3">
           <input
@@ -61,13 +62,14 @@ export function KeywordsPage() {
             placeholder="Search keywords…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="bg-surface-card border border-border rounded-lg px-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-400/50 w-64"
+            className="bg-surface-card border border-border rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 w-56"
           />
           <button
             onClick={refresh}
-            className="px-4 py-2 bg-surface-card border border-border text-sm text-gray-300 rounded-lg hover:bg-surface-hover transition-colors"
+            className="flex items-center gap-2 px-3 py-2 bg-surface-card border border-border text-xs text-zinc-400 rounded-lg hover:text-zinc-100 hover:bg-surface-hover"
           >
-            ↻ Refresh
+            <RotateCw size={13} />
+            Refresh
           </button>
         </div>
       </div>
@@ -80,13 +82,13 @@ export function KeywordsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Keyword</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Locale</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Volume</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide w-32">Difficulty</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Rank</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Target</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Intent</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Keyword</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Locale</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Volume</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest w-32">Difficulty</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Rank</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Target</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Intent</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -99,28 +101,28 @@ export function KeywordsPage() {
             ))}
             {keywords.map((kw) => (
               <tr key={kw.id} className="hover:bg-surface-hover transition-colors">
-                <td className="px-6 py-4 font-medium text-gray-200">{kw.keyword}</td>
-                <td className="px-6 py-4 uppercase text-gray-500">{kw.locale}</td>
-                <td className="px-6 py-4 text-right text-gray-300">
+                <td className="px-6 py-4 font-medium text-zinc-200">{kw.keyword}</td>
+                <td className="px-6 py-4 uppercase text-zinc-500">{kw.locale}</td>
+                <td className="px-6 py-4 text-right text-zinc-300">
                   {kw.searchVolume?.toLocaleString() ?? '—'}
                 </td>
                 <td className="px-6 py-4">
                   {kw.difficulty != null ? (
                     <DifficultyBar value={kw.difficulty} />
                   ) : (
-                    <span className="text-gray-600">—</span>
+                    <span className="text-zinc-600">—</span>
                   )}
                 </td>
                 <td className="px-6 py-4 text-right">
                   {kw.currentRank != null ? (
-                    <span className={`font-semibold ${kw.currentRank <= 10 ? 'text-green-400' : kw.currentRank <= 30 ? 'text-yellow-400' : 'text-gray-400'}`}>
+                    <span className={`font-semibold ${kw.currentRank <= 10 ? 'text-green-400' : kw.currentRank <= 30 ? 'text-yellow-400' : 'text-zinc-400'}`}>
                       #{kw.currentRank}
                     </span>
                   ) : (
-                    <span className="text-gray-600">—</span>
+                    <span className="text-zinc-600">—</span>
                   )}
                 </td>
-                <td className="px-6 py-4 text-right text-gray-500">
+                <td className="px-6 py-4 text-right text-zinc-500">
                   {kw.targetRank != null ? `#${kw.targetRank}` : '—'}
                 </td>
                 <td className="px-6 py-4">
@@ -129,14 +131,14 @@ export function KeywordsPage() {
                       {kw.intent}
                     </span>
                   ) : (
-                    <span className="text-gray-600">—</span>
+                    <span className="text-zinc-600">—</span>
                   )}
                 </td>
               </tr>
             ))}
             {!loading && keywords.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
                   {search ? 'No keywords match your search' : 'No keywords tracked yet'}
                 </td>
               </tr>
@@ -146,20 +148,20 @@ export function KeywordsPage() {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-400">
+        <div className="flex items-center justify-between mt-4 text-sm text-zinc-400">
           <span>Page {page} of {totalPages} ({total} total)</span>
           <div className="flex gap-2">
             <button
               disabled={page === 1}
               onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               ← Prev
             </button>
             <button
               disabled={page === totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               Next →
             </button>

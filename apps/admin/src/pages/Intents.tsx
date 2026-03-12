@@ -27,7 +27,7 @@ type HeatmapResponse = {
 const CONFIDENCE_LABEL = (c: number) =>
   c >= 80 ? { label: 'High', cls: 'bg-green-500/10 text-green-400' }
   : c >= 50 ? { label: 'Med', cls: 'bg-yellow-500/10 text-yellow-400' }
-  : { label: 'Low', cls: 'bg-gray-500/10 text-gray-400' };
+  : { label: 'Low', cls: 'bg-zinc-500/10 text-zinc-400' };
 
 const HEAT_COLOR = (v: number, max: number) => {
   if (max === 0 || v === 0) return 'bg-border';
@@ -36,7 +36,7 @@ const HEAT_COLOR = (v: number, max: number) => {
   if (pct >= 0.6) return 'bg-brand-800 text-white';
   if (pct >= 0.4) return 'bg-brand-600 text-white';
   if (pct >= 0.2) return 'bg-brand-400 text-white';
-  return 'bg-brand-100 text-gray-800';
+  return 'bg-brand-100 text-zinc-800';
 };
 
 function IntentsList() {
@@ -61,11 +61,11 @@ function IntentsList() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left px-5 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Type</th>
-              <th className="text-left px-5 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Segment</th>
-              <th className="text-right px-5 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Confidence</th>
-              <th className="text-left px-5 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Message preview</th>
-              <th className="text-right px-5 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Time</th>
+              <th className="text-left px-5 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Type</th>
+              <th className="text-left px-5 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Segment</th>
+              <th className="text-right px-5 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Confidence</th>
+              <th className="text-left px-5 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Message preview</th>
+              <th className="text-right px-5 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Time</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -81,47 +81,47 @@ function IntentsList() {
               return (
                 <tr key={sig.id} className="hover:bg-surface-hover">
                   <td className="px-5 py-3">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-400">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-brand-500/10 text-brand-400">
                       {sig.intentType}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-gray-400">{sig.segment ?? '—'}</td>
+                  <td className="px-5 py-3 text-zinc-400">{sig.segment ?? '—'}</td>
                   <td className="px-5 py-3 text-right">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${conf.cls}`}>
                       {conf.label} {sig.confidence}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-gray-300 max-w-xs truncate">
+                  <td className="px-5 py-3 text-zinc-300 max-w-xs truncate">
                     {sig.message ?? '—'}
                   </td>
-                  <td className="px-5 py-3 text-right text-gray-500">
+                  <td className="px-5 py-3 text-right text-zinc-500">
                     {new Date(sig.createdAt).toLocaleString()}
                   </td>
                 </tr>
               );
             })}
             {!loading && intents.length === 0 && (
-              <tr><td colSpan={5} className="px-5 py-12 text-center text-gray-500">No signals found</td></tr>
+              <tr><td colSpan={5} className="px-5 py-12 text-center text-zinc-500">No signals found</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-400">
+        <div className="flex items-center justify-between mt-4 text-sm text-zinc-400">
           <span>Page {page} of {totalPages} ({total} total)</span>
           <div className="flex gap-2">
             <button
               disabled={page === 1}
               onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               ← Prev
             </button>
             <button
               disabled={page === totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               Next →
             </button>
@@ -147,18 +147,18 @@ function Heatmap() {
 
   if (loading && !data) return <div className="animate-pulse h-64 bg-border rounded-xl" />;
   if (error) return <div className="text-red-400 text-sm">{error}</div>;
-  if (!data || intentTypes.length === 0) return <div className="text-gray-500 text-sm py-8 text-center">No heatmap data</div>;
+  if (!data || intentTypes.length === 0) return <div className="text-zinc-600 text-xs py-8 text-center">No heatmap data</div>;
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
-        <label className="text-sm text-gray-400">Last</label>
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-xs text-zinc-500">Last</span>
         {[7, 14, 30, 60].map((d) => (
           <button
             key={d}
             onClick={() => setDays(d)}
             className={`px-3 py-1 text-sm rounded-lg border transition-colors ${
-              days === d ? 'bg-brand-500 text-white border-brand-500' : 'border-border text-gray-300 hover:bg-surface-hover'
+              days === d ? 'bg-brand-500 text-white border-brand-500' : 'border-border text-zinc-400 hover:text-zinc-100 hover:bg-surface-hover'
             }`}
           >
             {d}d
@@ -170,9 +170,9 @@ function Heatmap() {
         <table className="text-xs">
           <thead>
             <tr>
-              <th className="pr-3 py-1 text-left text-gray-500 font-normal w-40">Intent</th>
+              <th className="pr-3 py-1 text-left text-zinc-500 font-normal w-40">Intent</th>
               {uniqueDates.map((d) => (
-                <th key={d} className="px-1 py-1 text-center text-gray-400 font-normal" style={{ minWidth: 28 }}>
+                <th key={d} className="px-1 py-1 text-center text-zinc-400 font-normal" style={{ minWidth: 28 }}>
                   {d.slice(5)}
                 </th>
               ))}
@@ -181,7 +181,7 @@ function Heatmap() {
           <tbody>
             {intentTypes.map((it) => (
               <tr key={it}>
-                <td className="pr-3 py-0.5 text-gray-300 font-medium whitespace-nowrap">{it}</td>
+                <td className="pr-3 py-0.5 text-zinc-300 font-medium whitespace-nowrap">{it}</td>
                 {uniqueDates.map((d) => {
                   const v = data.matrix[it]?.[d] ?? 0;
                   return (
@@ -210,8 +210,8 @@ export function IntentsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-white">Intent Explorer</h2>
-        <p className="text-sm text-gray-400 mt-1">User intent signals captured from chat sessions</p>
+        <h2 className="text-xl font-semibold text-zinc-100">Intent Explorer</h2>
+        <p className="text-xs text-zinc-500 mt-1">User intent signals captured from chat sessions</p>
       </div>
 
       <div className="flex gap-1 mb-6 bg-surface-card border border-border p-1 rounded-lg w-fit">
@@ -219,11 +219,11 @@ export function IntentsPage() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors capitalize ${
-              tab === t ? 'bg-surface-hover text-white' : 'text-gray-400 hover:text-white'
+            className={`px-4 py-1.5 text-sm font-medium rounded-md capitalize ${
+              tab === t ? 'bg-surface-hover text-zinc-100' : 'text-zinc-500 hover:text-zinc-100'
             }`}
           >
-            {t === 'list' ? '📋 List' : '🔥 Heatmap'}
+            {t === 'list' ? 'List' : 'Heatmap'}
           </button>
         ))}
       </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getSEOContent } from '../api/client';
 import { usePolling } from '../hooks/usePolling';
+import { RotateCw } from 'lucide-react';
 
 type SEOItem = {
   id: string;
@@ -37,14 +38,15 @@ export function SEOPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">SEO Pages</h1>
-          <p className="text-sm text-gray-400 mt-1">{total} generated pages</p>
+          <h1 className="text-xl font-semibold text-zinc-100">SEO Pages</h1>
+          <p className="text-xs text-zinc-500 mt-1">{total} generated pages</p>
         </div>
         <button
           onClick={refresh}
-          className="px-4 py-2 bg-surface-card border border-border text-sm text-gray-300 rounded-lg hover:bg-surface-hover transition-colors"
+          className="flex items-center gap-2 px-3 py-2 bg-surface-card border border-border text-xs text-zinc-400 rounded-lg hover:text-zinc-100 hover:bg-surface-hover"
         >
-          ↻ Refresh
+          <RotateCw size={13} />
+          Refresh
         </button>
       </div>
 
@@ -56,12 +58,12 @@ export function SEOPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Slug</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Type</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Locale</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Status</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Title</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Generated</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Slug</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Type</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Locale</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Status</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Title</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Generated</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -74,13 +76,13 @@ export function SEOPage() {
             ))}
             {items.map((item) => (
               <tr key={item.id} className="hover:bg-surface-hover transition-colors">
-                <td className="px-6 py-4 font-mono text-xs text-gray-300">{item.slug}</td>
+                <td className="px-6 py-4 font-mono text-xs text-zinc-300">{item.slug}</td>
                 <td className="px-6 py-4">
-                  <span className="bg-blue-500/10 text-blue-400 text-xs px-2 py-1 rounded-full">
+                  <span className="bg-brand-500/10 text-brand-400 text-xs px-2 py-1 rounded-full">
                     {item.pageType.replace(/_/g, ' ')}
                   </span>
                 </td>
-                <td className="px-6 py-4 uppercase text-gray-400">{item.locale}</td>
+                <td className="px-6 py-4 uppercase text-zinc-400">{item.locale}</td>
                 <td className="px-6 py-4">
                   <span className={`text-xs px-2 py-1 rounded-full ${
                     item.status === 'published'
@@ -90,15 +92,15 @@ export function SEOPage() {
                     {item.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-gray-300 max-w-xs truncate">{item.title}</td>
-                <td className="px-6 py-4 text-right text-gray-500">
+                <td className="px-6 py-4 text-zinc-300 max-w-xs truncate">{item.title}</td>
+                <td className="px-6 py-4 text-right text-zinc-500">
                   {item.generatedAt ? new Date(item.generatedAt).toLocaleDateString() : '—'}
                 </td>
               </tr>
             ))}
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
                   No SEO content yet
                 </td>
               </tr>
@@ -108,20 +110,20 @@ export function SEOPage() {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-400">
+        <div className="flex items-center justify-between mt-4 text-sm text-zinc-400">
           <span>Page {page} of {totalPages} ({total} total)</span>
           <div className="flex gap-2">
             <button
               disabled={page === 1}
               onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               ← Prev
             </button>
             <button
               disabled={page === totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               Next →
             </button>

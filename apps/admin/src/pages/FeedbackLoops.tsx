@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getFeedbackLoops } from '../api/client';
 import { usePolling } from '../hooks/usePolling';
+import { RotateCw } from 'lucide-react';
 
 type FeedbackEvent = {
   id: string;
@@ -46,14 +47,15 @@ export function FeedbackLoopsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">Feedback Loops</h2>
-          <p className="text-sm text-gray-400 mt-1">Autonomous optimization events — {total} total</p>
+          <h2 className="text-xl font-semibold text-zinc-100">Feedback Loops</h2>
+          <p className="text-xs text-zinc-500 mt-1">Autonomous optimization events — {total} total</p>
         </div>
         <button
           onClick={refresh}
-          className="px-4 py-2 bg-surface-card border border-border text-sm text-gray-300 rounded-lg hover:bg-surface-hover transition-colors"
+          className="flex items-center gap-2 px-3 py-2 bg-surface-card border border-border text-xs text-zinc-400 rounded-lg hover:text-zinc-100 hover:bg-surface-hover"
         >
-          ↻ Refresh
+          <RotateCw size={13} />
+          Refresh
         </button>
       </div>
 
@@ -75,29 +77,29 @@ export function FeedbackLoopsPage() {
               <div className="flex items-center gap-3 flex-wrap">
                 {ev.loopType && (
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    LOOP_TYPE_COLORS[ev.loopType] ?? 'bg-gray-500/10 text-gray-400'
+                    LOOP_TYPE_COLORS[ev.loopType] ?? 'bg-zinc-500/10 text-zinc-400'
                   }`}>
                     {ev.loopType.replace(/_/g, ' ')}
                   </span>
                 )}
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs text-gray-400 bg-surface-hover border border-border">
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs text-zinc-400 bg-surface-hover border border-border">
                   {ev.eventType}
                 </span>
-                <span className="text-xs text-gray-400">via {ev.source}</span>
+                <span className="text-xs text-zinc-400">via {ev.source}</span>
               </div>
-              <time className="text-xs text-gray-400 shrink-0">
+              <time className="text-xs text-zinc-400 shrink-0">
                 {new Date(ev.createdAt).toLocaleString()}
               </time>
             </div>
 
             {ev.summary && (
-              <p className="mt-3 text-sm text-gray-300">{ev.summary}</p>
+              <p className="mt-3 text-sm text-zinc-300">{ev.summary}</p>
             )}
 
             {ev.actionsTriggered && ev.actionsTriggered.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {ev.actionsTriggered.map((action, i) => (
-                  <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-gray-950 text-green-400">
+                  <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-surface text-green-400">
                     {action}
                   </span>
                 ))}
@@ -107,27 +109,27 @@ export function FeedbackLoopsPage() {
         ))}
 
         {!loading && events.length === 0 && (
-          <div className="bg-surface-card rounded-xl border border-border px-6 py-12 text-center text-gray-500">
+          <div className="bg-surface-card rounded-xl border border-border px-6 py-12 text-center text-zinc-500">
             No feedback loop events yet
           </div>
         )}
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-6 text-sm text-gray-400">
+        <div className="flex items-center justify-between mt-6 text-sm text-zinc-400">
           <span>Page {page} of {totalPages} ({total} total)</span>
           <div className="flex gap-2">
             <button
               disabled={page === 1}
               onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               ← Prev
             </button>
             <button
               disabled={page === totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               Next →
             </button>

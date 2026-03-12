@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getLeads } from '../api/client';
 import { usePolling } from '../hooks/usePolling';
+import { RotateCw } from 'lucide-react';
 
 type Lead = {
   sessionId: string;
@@ -22,7 +23,7 @@ const TIER_STYLES: Record<string, string> = {
   hot: 'bg-red-500/10 text-red-400 border-red-500/30',
   warm: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
   nurture: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-  cold: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
+  cold: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30',
 };
 
 function ScoreBar({ score }: { score: number }) {
@@ -33,7 +34,7 @@ function ScoreBar({ score }: { score: number }) {
       <div className="flex-1 bg-border rounded-full h-2">
         <div className={`h-2 rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-sm font-semibold text-gray-200 w-8 text-right">{score}</span>
+      <span className="text-sm font-semibold text-zinc-200 w-8 text-right">{score}</span>
     </div>
   );
 }
@@ -55,14 +56,15 @@ export function LeadsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">Leads</h2>
-          <p className="text-sm text-gray-400 mt-1">{total} scored leads</p>
+          <h2 className="text-xl font-semibold text-zinc-100">Leads</h2>
+          <p className="text-xs text-zinc-500 mt-1">{total} scored leads</p>
         </div>
         <button
           onClick={refresh}
-          className="px-4 py-2 bg-surface-card border border-border text-sm text-gray-300 rounded-lg hover:bg-surface-hover transition-colors"
+          className="flex items-center gap-2 px-3 py-2 bg-surface-card border border-border text-xs text-zinc-400 rounded-lg hover:text-zinc-100 hover:bg-surface-hover"
         >
-          ↻ Refresh
+          <RotateCw size={13} />
+          Refresh
         </button>
       </div>
 
@@ -74,12 +76,12 @@ export function LeadsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Session</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Score</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Tier</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Segment</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Intents</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Last seen</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Session</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Score</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Tier</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Segment</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Intents</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Last seen</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -92,7 +94,7 @@ export function LeadsPage() {
             ))}
             {leads.map((lead) => (
               <tr key={lead.sessionId} className="hover:bg-surface-hover">
-                <td className="px-6 py-4 font-mono text-xs text-gray-400 max-w-[120px] truncate">
+                <td className="px-6 py-4 font-mono text-xs text-zinc-400 max-w-[120px] truncate">
                   {lead.sessionId}
                 </td>
                 <td className="px-6 py-4 min-w-[160px]">
@@ -105,16 +107,16 @@ export function LeadsPage() {
                     {lead.tier}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-gray-300 capitalize">{lead.segment ?? '—'}</td>
-                <td className="px-6 py-4 text-right text-gray-300">{lead.intentCount}</td>
-                <td className="px-6 py-4 text-right text-gray-500">
+                <td className="px-6 py-4 text-zinc-300 capitalize">{lead.segment ?? '—'}</td>
+                <td className="px-6 py-4 text-right text-zinc-300">{lead.intentCount}</td>
+                <td className="px-6 py-4 text-right text-zinc-500">
                   {new Date(lead.lastSeen).toLocaleString()}
                 </td>
               </tr>
             ))}
             {!loading && leads.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
                   No scored leads yet
                 </td>
               </tr>
@@ -124,20 +126,20 @@ export function LeadsPage() {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-400">
+        <div className="flex items-center justify-between mt-4 text-sm text-zinc-400">
           <span>Page {page} of {totalPages} ({total} total)</span>
           <div className="flex gap-2">
             <button
               disabled={page === 1}
               onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               ← Prev
             </button>
             <button
               disabled={page === totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               Next →
             </button>

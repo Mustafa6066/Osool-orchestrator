@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getWaitlist } from '../api/client';
 import { usePolling } from '../hooks/usePolling';
+import { RotateCw } from 'lucide-react';
 
 type WaitlistEntry = {
   id: string;
@@ -39,14 +40,15 @@ export function WaitlistPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Waitlist</h1>
-          <p className="text-sm text-gray-400 mt-1">{total} total entries</p>
+          <h1 className="text-xl font-semibold text-zinc-100">Waitlist</h1>
+          <p className="text-xs text-zinc-500 mt-1">{total} total entries</p>
         </div>
         <button
           onClick={refresh}
-          className="px-4 py-2 bg-surface-card border border-border text-sm text-gray-300 rounded-lg hover:bg-surface-hover transition-colors"
+          className="flex items-center gap-2 px-3 py-2 bg-surface-card border border-border text-xs text-zinc-400 rounded-lg hover:text-zinc-100 hover:bg-surface-hover"
         >
-          ↻ Refresh
+          <RotateCw size={13} />
+          Refresh
         </button>
       </div>
 
@@ -58,13 +60,13 @@ export function WaitlistPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Name</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Email</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Score</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Segment</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Locations</th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Source</th>
-              <th className="text-right px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Joined</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Name</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Email</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Score</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Segment</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Locations</th>
+              <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Source</th>
+              <th className="text-right px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Joined</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -77,15 +79,15 @@ export function WaitlistPage() {
             ))}
             {entries.map((w) => (
               <tr key={w.id} className="hover:bg-surface-hover transition-colors">
-                <td className="px-6 py-4 font-medium text-gray-200">{w.name ?? '—'}</td>
-                <td className="px-6 py-4 text-gray-400">{w.email}</td>
+                <td className="px-6 py-4 font-medium text-zinc-200">{w.name ?? '—'}</td>
+                <td className="px-6 py-4 text-zinc-400">{w.email}</td>
                 <td className="px-6 py-4">
                   {w.leadScore != null ? (
                     <span className="text-green-400 bg-green-500/10 text-xs px-2 py-1 rounded-full font-semibold">
                       {w.leadScore}
                     </span>
                   ) : (
-                    <span className="text-gray-600">—</span>
+                    <span className="text-zinc-600">—</span>
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -94,25 +96,25 @@ export function WaitlistPage() {
                       {w.segment.replace(/_/g, ' ')}
                     </span>
                   ) : (
-                    <span className="text-gray-600">—</span>
+                    <span className="text-zinc-600">—</span>
                   )}
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex flex-wrap gap-1">
                     {(w.preferredLocations ?? []).map((l) => (
-                      <span key={l} className="bg-border text-gray-300 text-xs px-2 py-0.5 rounded">{l}</span>
+                      <span key={l} className="bg-border text-zinc-300 text-xs px-2 py-0.5 rounded">{l}</span>
                     ))}
                   </div>
                 </td>
-                <td className="px-6 py-4 text-gray-500 text-xs">{w.source ?? '—'}</td>
-                <td className="px-6 py-4 text-right text-gray-500">
+                <td className="px-6 py-4 text-zinc-500 text-xs">{w.source ?? '—'}</td>
+                <td className="px-6 py-4 text-right text-zinc-500">
                   {new Date(w.createdAt).toLocaleDateString()}
                 </td>
               </tr>
             ))}
             {!loading && entries.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
                   No waitlist entries yet
                 </td>
               </tr>
@@ -122,20 +124,20 @@ export function WaitlistPage() {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-400">
+        <div className="flex items-center justify-between mt-4 text-sm text-zinc-400">
           <span>Page {page} of {totalPages} ({total} total)</span>
           <div className="flex gap-2">
             <button
               disabled={page === 1}
               onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               ← Prev
             </button>
             <button
               disabled={page === totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-gray-300"
+              className="px-3 py-1.5 border border-border rounded-lg hover:bg-surface-hover disabled:opacity-50 text-zinc-300"
             >
               Next →
             </button>

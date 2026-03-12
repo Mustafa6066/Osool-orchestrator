@@ -18,8 +18,8 @@ function PrivateRoute() {
   const { authed, loading } = useAuth();
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <span className="text-gray-400 text-sm">Loading…</span>
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <span className="text-zinc-500 text-sm">Loading…</span>
       </div>
     );
   }

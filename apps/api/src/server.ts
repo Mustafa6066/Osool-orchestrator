@@ -23,6 +23,7 @@ import { dataRoutes } from './routes/data.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
 import { startWorkers, stopWorkers } from './jobs/workers.js';
+import { createSEOWorker, createScoringWorker, createEmailWorker } from './jobs/queues.js';
 
 const cfg = getConfig();
 
@@ -130,6 +131,12 @@ async function start() {
     // Start BullMQ workers
     await startWorkers();
     app.log.info('✅ Background workers started');
+
+    // Start tRPC queue workers (seo-generation, lead-scoring, email-nurture)
+    createSEOWorker();
+    createScoringWorker();
+    createEmailWorker();
+    app.log.info('✅ tRPC queue workers started');
   } catch (err) {
     app.log.error(err);
     process.exit(1);
