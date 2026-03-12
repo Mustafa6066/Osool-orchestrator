@@ -9,6 +9,7 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+watchPatterns = ["/apps/api/**", "/packages/**", "/Dockerfile", "/tsconfig.base.json"]
 
 [deploy]
 healthcheckPath = "/health"
