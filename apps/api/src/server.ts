@@ -24,6 +24,7 @@ import { adminRoutes } from './routes/admin.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
 import { startWorkers, stopWorkers } from './jobs/workers.js';
 import { createSEOWorker, createScoringWorker, createEmailWorker } from './jobs/queues.js';
+import { startScheduler, stopScheduler } from './scheduler.js';
 
 const cfg = getConfig();
 
@@ -116,6 +117,7 @@ async function start() {
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     app.log.info(`Received ${signal}, shutting down gracefully…`);
+    stopScheduler();
     await stopWorkers();
     await app.close();
     process.exit(0);
@@ -137,6 +139,10 @@ async function start() {
     createScoringWorker();
     createEmailWorker();
     app.log.info('✅ tRPC queue workers started');
+
+    // Start autonomous agent scheduler
+    startScheduler(app.log);
+    app.log.info('✅ Autonomous agent scheduler started');
   } catch (err) {
     app.log.error(err);
     process.exit(1);
