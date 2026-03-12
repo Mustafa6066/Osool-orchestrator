@@ -27,7 +27,7 @@ import {
   extractBearerToken,
 } from '../lib/auth.js';
 import { getConfig } from '../config.js';
-import { getRedis } from '../lib/redis.js';
+import { getRedis, isRedisConfigured } from '../lib/redis.js';
 import { db } from '@osool/db';
 import {
   intentSignals,
@@ -171,7 +171,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get('/dashboard', async (req, reply) => {
     if (!(await requireAdmin(req as never, reply as never))) return;
 
-    const redis = getRedis();
+    const redisAvailable = isRedisConfigured();
+    const redis = redisAvailable ? getRedis() : null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -208,7 +209,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       db.select({ c: count() }).from(funnelEvents).where(eq(funnelEvents.stage, 'qualify')),
       db.select({ c: count() }).from(funnelEvents).where(eq(funnelEvents.stage, 'convert')),
       db.select({ c: count() }).from(funnelEvents).where(eq(funnelEvents.stage, 'retain')),
-      redis.get('system:queue_depth'),
+      redis ? redis.get('system:queue_depth') : Promise.resolve(null),
     ]);
 
     // Agent last run times
@@ -216,13 +217,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const agentLastRun: Record<string, string> = {};
     await Promise.all(
       agentKeys.map(async (agent) => {
-        const ts = await redis.get(`agent:${agent}:last_run`);
+        const ts = redis ? await redis.get(`agent:${agent}:last_run`) : null;
         agentLastRun[agent] = ts ?? 'never';
       }),
     );
 
     // Trending
-    const trendingRaw = await redis.get('nexus:trending');
+    const trendingRaw = redis ? await redis.get('nexus:trending') : null;
     const trending = trendingRaw
       ? (JSON.parse(trendingRaw) as { trendingDevelopers?: { name: string; mentionCount: number }[]; trendingLocations?: { name: string; mentionCount: number }[] })
       : { trendingDevelopers: [], trendingLocations: [] };
@@ -235,11 +236,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       dbStatus = 'down';
     }
 
-    let redisStatus: 'healthy' | 'degraded' | 'down' = 'healthy';
-    try {
-      await redis.ping();
-    } catch {
-      redisStatus = 'down';
+    let redisStatus: 'healthy' | 'degraded' | 'down' = redis ? 'healthy' : 'degraded';
+    if (redis) {
+      try {
+        await redis.ping();
+      } catch {
+        redisStatus = 'down';
+      }
     }
 
     const response: DashboardResponse = {
@@ -291,17 +294,19 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get('/agents', async (req, reply) => {
     if (!(await requireAdmin(req as never, reply as never))) return;
 
-    const redis = getRedis();
+    const redis = isRedisConfigured() ? getRedis() : null;
     const agentNames = ['nexus', 'seo', 'marketing', 'integration'];
 
     const agentStatuses = await Promise.all(
       agentNames.map(async (name) => {
-        const [lastRun, status, nextRun, lastLogs] = await Promise.all([
-          redis.get(`agent:${name}:last_run`),
-          redis.get(`agent:${name}:status`),
-          redis.get(`agent:${name}:next_run`),
-          redis.lrange(`agent:${name}:logs`, 0, 9),
-        ]);
+        const [lastRun, status, nextRun, lastLogs] = redis
+          ? await Promise.all([
+              redis.get(`agent:${name}:last_run`),
+              redis.get(`agent:${name}:status`),
+              redis.get(`agent:${name}:next_run`),
+              redis.lrange(`agent:${name}:logs`, 0, 9),
+            ])
+          : [null, null, null, [] as string[]];
 
         return {
           name,
