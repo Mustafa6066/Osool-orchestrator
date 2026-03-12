@@ -41,6 +41,8 @@ async function build() {
   await app.register(cors, {
     origin: (origin, cb) => {
       if (!origin) return cb(null, true); // Server-to-server
+      // Always allow Railway-hosted services and configured origins
+      if (origin.endsWith('.railway.app')) return cb(null, true);
       const allowed = getAllowedOrigins();
       if (allowed.includes(origin)) return cb(null, true);
       cb(new Error(`Origin ${origin} not allowed`), false);
