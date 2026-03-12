@@ -36,7 +36,7 @@ export async function runPageContentGenerationWorkflow(
 
   // Step 1: Generate new content
   await seoQueue.add('generate-seo-content', jobData, {
-    jobId: `seo:${slug}:${new Date().toISOString().slice(0, 10)}`,
+    jobId: `seo-${slug}-${new Date().toISOString().slice(0, 10)}`,
     priority: 3,
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },

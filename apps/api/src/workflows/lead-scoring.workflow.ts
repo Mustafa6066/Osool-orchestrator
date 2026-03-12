@@ -22,7 +22,7 @@ export async function runLeadScoringWorkflow(input: LeadScoringInput): Promise<v
     'score-lead',
     { sessionId: input.sessionId },
     {
-      jobId: `score:${input.sessionId}:${Date.now()}`,
+      jobId: `score-${input.sessionId}-${Date.now()}`,  
       priority: 2,
       attempts: 3,
       backoff: { type: 'exponential', delay: 1000 },
@@ -65,7 +65,7 @@ export async function runLeadScoringWorkflow(input: LeadScoringInput): Promise<v
     { sessionId: input.sessionId },
     {
       delay: 6000,
-      jobId: `email-trigger:${input.sessionId}:${Date.now()}`,
+      jobId: `email-trigger-${input.sessionId}-${Date.now()}`,  
       attempts: 3,
       removeOnComplete: { count: 200 },
       removeOnFail: { count: 50 },

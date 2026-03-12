@@ -38,7 +38,7 @@ export async function runEmailSequenceWorkflow(input: EmailSequenceInput): Promi
     };
 
     await emailSendQueue.add('send-email', jobData, {
-      jobId: `email:${sequenceId}:step${stepIndex}:${input.sessionId}`,
+      jobId: `email-${sequenceId}-step${stepIndex}-${input.sessionId}`,  
       priority: 1,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
@@ -54,7 +54,7 @@ export async function runEmailSequenceWorkflow(input: EmailSequenceInput): Promi
     'check-email-triggers',
     { sessionId: input.sessionId },
     {
-      jobId: `email-trigger:${input.sessionId}:${Date.now()}`,
+      jobId: `email-trigger-${input.sessionId}-${Date.now()}`,  
       priority: 2,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },

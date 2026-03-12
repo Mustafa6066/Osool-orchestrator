@@ -33,7 +33,7 @@ export async function runFeedbackLoopWorkflow(input: FeedbackLoopWorkflowInput =
         'run-feedback-loop',
         { loopType },
         {
-          jobId: `feedback:${loopType}:${new Date().toISOString().slice(0, 13)}`,
+          jobId: `feedback-${loopType}-${new Date().toISOString().slice(0, 13).replace(/:/g, '-')}`,  
           delay: idx * staggerMs,
           priority: 5,
           attempts: 2,

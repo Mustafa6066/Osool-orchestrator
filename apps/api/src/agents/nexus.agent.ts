@@ -15,7 +15,7 @@ export class NexusAgent extends BaseAgent {
       'market-pulse',
       { triggeredBy: 'nexus-agent' },
       {
-        jobId: `market-pulse:${new Date().toISOString().slice(0, 13)}`, // 1-per-hour deduplication
+        jobId: `market-pulse-${new Date().toISOString().slice(0, 13).replace(/:/g, '-')}`, // 1-per-hour deduplication
         removeOnComplete: { count: 24 },
         removeOnFail: { count: 12 },
       },

@@ -27,7 +27,7 @@ export class IntegrationAgent extends BaseAgent {
           'score-lead',
           { sessionId: sid },
           {
-            jobId: `score:${sid}:${Date.now()}`,
+            jobId: `score-${sid}-${Date.now()}`,  
             removeOnComplete: { count: 100 },
             removeOnFail: { count: 50 },
           },
@@ -67,7 +67,7 @@ export class IntegrationAgent extends BaseAgent {
             segment: scoreData?.segment ?? latestSignal?.segment ?? undefined,
           },
           {
-            jobId: `email-trigger:${sid}:${Date.now()}`,
+            jobId: `email-trigger-${sid}-${Date.now()}`,  
             removeOnComplete: { count: 100 },
             removeOnFail: { count: 50 },
           },

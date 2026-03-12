@@ -42,7 +42,7 @@ export async function runIntentProcessingWorkflow(input: IntentProcessingInput):
       { sessionId: input.sessionId },
       {
         delay: 3000, // Wait 3s for intent job to complete first
-        jobId: `score:${input.sessionId}:${Date.now()}`,
+        jobId: `score-${input.sessionId}-${Date.now()}`,  
         attempts: 3,
         removeOnComplete: { count: 200 },
         removeOnFail: { count: 50 },
@@ -53,7 +53,7 @@ export async function runIntentProcessingWorkflow(input: IntentProcessingInput):
       { sessionId: input.sessionId },
       {
         delay: 5000, // Wait for scoring
-        jobId: `email-trigger:${input.sessionId}:${Date.now()}`,
+        jobId: `email-trigger-${input.sessionId}-${Date.now()}`,  
         attempts: 3,
         removeOnComplete: { count: 200 },
         removeOnFail: { count: 50 },

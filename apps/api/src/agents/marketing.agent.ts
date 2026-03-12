@@ -68,7 +68,7 @@ export class MarketingAgent extends BaseAgent {
           keywordId: kw.id,
         },
         {
-          jobId: `seo:${kw.id}:${new Date().toISOString().slice(0, 10)}`,
+          jobId: `seo-${kw.id}-${new Date().toISOString().slice(0, 10)}`,
           removeOnComplete: { count: 50 },
           removeOnFail: { count: 20 },
         },

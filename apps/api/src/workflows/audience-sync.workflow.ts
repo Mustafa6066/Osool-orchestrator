@@ -27,7 +27,7 @@ export async function runAudienceSyncWorkflow(input: AudienceSyncInput): Promise
         'sync-audience',
         { segment, platform, campaignId },
         {
-          jobId: `audience:${platform}:${segment}:${Date.now()}`,
+          jobId: `audience-${platform}-${segment}-${Date.now()}`,
           priority: 3,
           attempts: 3,
           backoff: { type: 'exponential', delay: 5000 },
