@@ -103,8 +103,16 @@ export async function scoreLeadSession(data: LeadScoringJobData): Promise<{ scor
   // Tier classification
   const tier = score >= 85 ? 'hot' : score >= 60 ? 'warm' : score >= 30 ? 'nurture' : 'cold';
 
-  // Store in Redis
-  await redis.set(`lead:score:${data.anonymousId}`, JSON.stringify({ score, tier, segment: dominantSegment, updatedAt: new Date().toISOString() }), 'EX', 86400 * 7);
+  // Store in Redis — keyed by anonymousId when available, always keyed by sessionId
+  const scorePayload = JSON.stringify({ score, tier, segment: dominantSegment, anonymousId: data.anonymousId, updatedAt: new Date().toISOString() });
+
+  // Session-level key (always written, used by integration agent)
+  await redis.set(`lead:score:session:${data.sessionId}`, scorePayload, 'EX', 86400 * 7);
+
+  // Visitor-level key (written only when anonymousId is known)
+  if (data.anonymousId) {
+    await redis.set(`lead:score:${data.anonymousId}`, scorePayload, 'EX', 86400 * 7);
+  }
 
   // Trigger email sequence if threshold crossed
   if (score >= 30) {

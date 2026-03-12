@@ -1,8 +1,9 @@
 import { BaseAgent } from './base.agent.js';
 import { getLeadScoringQueue, getEmailTriggerQueue, getFeedbackLoopQueue } from '../jobs/queue.js';
 import { db } from '@osool/db';
-import { chatSessions } from '@osool/db/schema';
-import { sql } from 'drizzle-orm';
+import { chatSessions, intentSignals } from '@osool/db/schema';
+import { eq, desc, sql } from 'drizzle-orm';
+import { getRedis } from '../lib/redis.js';
 
 /**
  * Integration Agent — orchestrates lead scoring, email trigger evaluation,
@@ -35,20 +36,43 @@ export class IntegrationAgent extends BaseAgent {
     );
     await this.logToRedis(`Integration: ${sessionIds.length} scoring jobs queued`);
 
-    // Evaluate email triggers for each session
+    // Evaluate email triggers for each session — enrich payload from Redis + DB
     const emailTriggerQueue = getEmailTriggerQueue();
+    const redis = getRedis();
+
     await Promise.all(
-      sessionIds.map((sid) =>
-        emailTriggerQueue.add(
+      sessionIds.map(async (sid) => {
+        // Fetch the cached lead score from Redis (written by score-lead job)
+        const scoreStr = await redis.get(`lead:score:session:${sid}`);
+        const scoreData = scoreStr
+          ? (JSON.parse(scoreStr) as { score?: number; tier?: string; segment?: string; anonymousId?: string })
+          : null;
+
+        // Fetch anonymous ID and visitor ID from the most recent intent signal for this session
+        const [latestSignal] = await db
+          .select({ anonymousId: intentSignals.anonymousId, segment: intentSignals.segment, userId: intentSignals.userId })
+          .from(intentSignals)
+          .where(eq(intentSignals.sessionId, sid))
+          .orderBy(desc(intentSignals.createdAt))
+          .limit(1);
+
+        return emailTriggerQueue.add(
           'check-email-triggers',
-          { sessionId: sid },
+          {
+            sessionId: sid,
+            anonymousId: scoreData?.anonymousId ?? latestSignal?.anonymousId ?? undefined,
+            userId: latestSignal?.userId ?? undefined,
+            trigger: 'session_end' as const,
+            score: scoreData?.score,
+            segment: scoreData?.segment ?? latestSignal?.segment ?? undefined,
+          },
           {
             jobId: `email-trigger:${sid}:${Date.now()}`,
             removeOnComplete: { count: 100 },
             removeOnFail: { count: 50 },
           },
-        ),
-      ),
+        );
+      }),
     );
     await this.logToRedis(`Integration: ${sessionIds.length} email trigger jobs queued`);
 

@@ -1,8 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { env } from '../lib/env.js';
-import { db } from '@osool/db';
-import { seoPages, keywords } from '@osool/db/schema';
-import { eq } from 'drizzle-orm';
 import { DEVELOPERS, LOCATIONS } from '@osool/shared';
 import { slugifyEn, comparisonSlug } from '@osool/shared';
 
@@ -51,7 +48,7 @@ export async function generateSEOPage(input: SEOPageInput): Promise<GeneratedPag
   const prompt = PAGE_PROMPTS[input.pageType] ?? PAGE_PROMPTS.developer_profile;
   let context = '';
   let path = '';
-  let entity = '';
+  let entity: string = '';
 
   switch (input.pageType) {
     case 'developer_profile': {
@@ -81,9 +78,26 @@ Developer B: ${dev2.name}, founded ${dev2.founded}, ${dev2.projectCount} project
       path = `/${input.locale}/compare/${comparisonSlug(dev1.slug, dev2.slug)}`;
       break;
     }
+    case 'roi_analysis': {
+      const loc = LOCATIONS.find((l) => l.slug === input.entityId);
+      entity = loc ? loc.name : (input.entityId ?? 'egyptian-real-estate');
+      context = loc
+        ? `Location: ${loc.name} (${loc.nameAr}). Region: ${loc.region}. ${loc.description}`
+        : `Egyptian real estate ROI analysis for area: ${input.entityId ?? 'general'}.`;
+      path = `/${input.locale}/roi/${input.entityId ?? 'guide'}`;
+      break;
+    }
+    case 'buying_guide': {
+      entity = 'Egyptian Real Estate Buying Guide';
+      const region = input.entityId ?? 'general';
+      context = `First-time buyer guide for Egyptian real estate${region !== 'general' ? ` focusing on the ${region} area` : ''}. Cover legal process, payment plans, developer selection, common pitfalls, and market timing.`;
+      path = `/${input.locale}/guides/${region}`;
+      break;
+    }
     default: {
-      path = `/${input.locale}/${input.pageType}/${input.entityId ?? 'guide'}`;
-      entity = input.pageType.replace(/_/g, ' ');
+      const pageTypeStr = input.pageType as string;
+      path = `/${input.locale}/${pageTypeStr}/${input.entityId ?? 'guide'}`;
+      entity = pageTypeStr.replace(/_/g, ' ');
     }
   }
 
@@ -127,20 +141,8 @@ Developer B: ${dev2.name}, founded ${dev2.founded}, ${dev2.projectCount} project
     datePublished: new Date().toISOString(),
   };
 
-  // Store in DB
-  await db.insert(seoPages).values({
-    path,
-    locale: input.locale,
-    title: parsed.title,
-    metaDescription: parsed.metaDescription,
-    h1: parsed.h1,
-    content: parsed.content,
-    pageType: input.pageType,
-    keywordId: input.keywordId,
-    schemaMarkup,
-    published: true,
-    lastRegenerated: new Date(),
-  }).onConflictDoNothing();
+  // NOTE: DB persistence is the responsibility of the job handler (generate-seo-content.job.ts).
+  // Do NOT write to the DB here to avoid double writes across two tables.
 
   return { path, ...parsed, schemaMarkup };
 }

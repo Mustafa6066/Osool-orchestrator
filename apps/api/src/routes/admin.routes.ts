@@ -23,6 +23,7 @@ import {
   signAccessToken,
   signRefreshToken,
   verifyAccessToken,
+  verifyRefreshToken,
   extractBearerToken,
 } from '../lib/auth.js';
 import { getConfig } from '../config.js';
@@ -124,7 +125,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       const { refreshToken } = req.body ?? {};
       if (!refreshToken) return reply.status(400).send({ error: 'refreshToken required' });
 
-      const payload = verifyAccessToken(refreshToken);
+      const payload = verifyRefreshToken(refreshToken);
       if (!payload) return reply.status(401).send({ error: 'Invalid refresh token' });
 
       return reply.send({

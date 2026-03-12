@@ -28,12 +28,28 @@ export function signRefreshToken(email: string): string {
   return jwt.sign({ sub: email, role: 'admin', type: 'refresh' }, secret, { expiresIn: REFRESH_EXPIRY });
 }
 
-/** Verify and decode an access token. Returns null if invalid or expired. */
+/** Verify and decode an access token. Returns null if invalid, expired, or is a refresh token. */
 export function verifyAccessToken(token: string): AdminTokenPayload | null {
   try {
     const secret = getConfig().ADMIN_JWT_SECRET ?? 'dev-secret-change-in-production';
-    const payload = jwt.verify(token, secret) as AdminTokenPayload;
+    const payload = jwt.verify(token, secret) as AdminTokenPayload & { type?: string };
     if (payload.role !== 'admin') return null;
+    // Reject refresh tokens presented as access tokens
+    if (payload.type === 'refresh') return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/** Verify and decode a refresh token. Returns null if invalid, expired, or is an access token. */
+export function verifyRefreshToken(token: string): AdminTokenPayload | null {
+  try {
+    const secret = getConfig().ADMIN_JWT_SECRET ?? 'dev-secret-change-in-production';
+    const payload = jwt.verify(token, secret) as AdminTokenPayload & { type?: string };
+    if (payload.role !== 'admin') return null;
+    // Refresh tokens must have type: 'refresh'
+    if (payload.type !== 'refresh') return null;
     return payload;
   } catch {
     return null;

@@ -11,6 +11,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { eq } from 'drizzle-orm';
 import { getConfig } from '../config.js';
 import { safeCompare } from '../lib/auth.js';
 import { getIntentQueue, getAudienceSyncQueue } from '../jobs/queue.js';
@@ -130,6 +131,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
             sessionId: payload.sessionId,
             userId: payload.userId,
             anonymousId: payload.anonymousId,
+            role: payload.message.role,
             message: payload.message.content,
             pageContext: payload.pageContext,
             timestamp: payload.message.timestamp,
@@ -183,7 +185,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
           endedAt: new Date(),
           lastMessageAt: new Date(),
         })
-        .where(sql`session_id = ${payload.sessionId}`);
+        .where(eq(chatSessions.id, payload.sessionId));
 
       // Enqueue lead scoring job
       const { getLeadScoringQueue } = await import('../jobs/queue.js');
@@ -270,10 +272,26 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
       }
 
       // Sync audience (high-intent users flagged immediately)
+      // Cache the lead profile in Redis so the audience sync job can hash the email
+      const { getRedis } = await import('../lib/redis.js');
+      const redis = getRedis();
+      await redis.set(
+        `lead:profile:${payload.anonymousId}`,
+        JSON.stringify({ email: payload.email, name: payload.name }),
+        'EX',
+        86400 * 7,
+      );
+
       const syncQueue = getAudienceSyncQueue();
       await syncQueue.add(
         'sync-converter',
-        { email: payload.email, event: payload.eventType },
+        {
+          anonymousId: payload.anonymousId,
+          segment: 'first_time_buyer',
+          channels: ['meta', 'google'] as ('meta' | 'google')[],
+          trigger: 'signup' as const,
+          platform: 'meta',
+        },
         { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
       );
 
@@ -316,5 +334,4 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
   );
 };
 
-// Import sql from drizzle-orm for .where() calls
-import { sql } from 'drizzle-orm';
+

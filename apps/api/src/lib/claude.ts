@@ -198,7 +198,12 @@ Respond with ONLY a JSON object (no markdown):
 
   const { content } = await callClaude([{ role: 'user', content: prompt }], undefined, 3000);
   const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned) as GeneratedContent;
+  try {
+    return JSON.parse(cleaned) as GeneratedContent;
+  } catch {
+    const fallback = `${devA.name} vs ${devB.name}: comparison content could not be generated. Please retry.`;
+    return { en: fallback, ar: fallback, seoTitle: `${devA.name} vs ${devB.name}`, seoDescription: fallback.slice(0, 155) };
+  }
 }
 
 /** Generate ROI analysis content for a location. */
@@ -234,7 +239,12 @@ Respond with ONLY a JSON object (no markdown):
 
   const { content } = await callClaude([{ role: 'user', content: prompt }], undefined, 3000);
   const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned) as GeneratedContent;
+  try {
+    return JSON.parse(cleaned) as GeneratedContent;
+  } catch {
+    const fallback = `ROI analysis for ${location}: content could not be generated. Please retry.`;
+    return { en: fallback, ar: fallback, seoTitle: `${location} Real Estate ROI 2025`, seoDescription: fallback.slice(0, 155) };
+  }
 }
 
 /** Generate project deep-dive content. */
@@ -261,7 +271,13 @@ Respond with ONLY a JSON object (no markdown):
 
   const { content } = await callClaude([{ role: 'user', content: prompt }], undefined, 2500);
   const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned) as GeneratedContent;
+  try {
+    return JSON.parse(cleaned) as GeneratedContent;
+  } catch {
+    const name = project.name ?? 'Project';
+    const fallback = `${name}: content could not be generated. Please retry.`;
+    return { en: fallback, ar: fallback, seoTitle: name, seoDescription: fallback.slice(0, 155) };
+  }
 }
 
 /** Generate personalized email content for a lead. */
@@ -303,7 +319,14 @@ Respond with ONLY a JSON object (no markdown):
 
   const { content } = await callClaude([{ role: 'user', content: prompt }], undefined, 2000);
   const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned) as { subject: string; htmlBody: string };
+  try {
+    return JSON.parse(cleaned) as { subject: string; htmlBody: string };
+  } catch {
+    return {
+      subject: `${templateType === 'premium_invite' ? 'Exclusive Invitation' : 'Market Insights'} — Osool CoInvestor`,
+      htmlBody: `<p>Dear ${lead.name ?? 'Investor'},</p><p>We have curated market insights for you. Please visit Osool CoInvestor for more details.</p>`,
+    };
+  }
 }
 
 /** Generate ad copy variants for a topic and audience segment. */
@@ -335,5 +358,14 @@ Respond with ONLY a JSON array (no markdown):
 
   const { content } = await callClaude([{ role: 'user', content: prompt }], undefined, 1000);
   const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned) as { headline: string; body: string; cta: string }[];
+  try {
+    return JSON.parse(cleaned) as { headline: string; body: string; cta: string }[];
+  } catch {
+    // Return 3 minimal variants so the caller never crashes
+    return [
+      { headline: `Invest in Egypt RE`, body: `Osool CoInvestor — data-driven real estate for ${segment}.`, cta: 'Explore Now' },
+      { headline: `Smart RE Decisions`, body: `Compare developers, track ROI, invest confidently.`, cta: 'Get Started' },
+      { headline: `Egypt Property 2025`, body: `Exclusive insights for serious investors.`, cta: 'Learn More' },
+    ];
+  }
 }

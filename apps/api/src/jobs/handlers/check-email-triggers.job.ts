@@ -38,6 +38,20 @@ export async function checkEmailTriggers(data: EmailTriggerJobData): Promise<{ t
     name = user?.name ?? name;
   }
 
+  // Fallback to lead profile cache for anonymous users
+  if (!email && data.anonymousId) {
+    const leadStr = await redis.get(`lead:profile:${data.anonymousId}`);
+    if (leadStr) {
+      try {
+        const lead = JSON.parse(leadStr) as { email?: string; name?: string };
+        email = lead.email ?? email;
+        name = lead.name ?? name;
+      } catch {
+        // Ignore malformed cache payload and continue without email
+      }
+    }
+  }
+
   if (!email) return { triggered: false };
 
   // Determine sequence tier
@@ -93,7 +107,7 @@ export async function checkEmailTriggers(data: EmailTriggerJobData): Promise<{ t
   const emailContent = await generateEmail(
     {
       name,
-      segment: (data.segment ?? signals[0]?.segment) as string,
+      segment: data.segment ?? signals[0]?.segment ?? 'first_time_buyer',
       preferredAreas: [...new Set(topEntities.filter((e) => !e.includes('_')))].slice(0, 3),
       preferredDevelopers: [...new Set(topEntities.filter((e) => e.includes('_')))].slice(0, 3),
       leadScore: score,
