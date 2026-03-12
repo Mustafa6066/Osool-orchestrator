@@ -9,6 +9,11 @@ import { db } from '@osool/db';
 import { sql } from 'drizzle-orm';
 
 export const healthRoutes: FastifyPluginAsync = async (app) => {
+  // Root handler — directs browsers/curl to /health
+  app.get('/', async (_req, reply) => {
+    return reply.redirect('/health');
+  });
+
   app.get(
     '/health',
     {
