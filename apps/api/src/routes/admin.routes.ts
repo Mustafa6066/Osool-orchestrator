@@ -212,13 +212,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       redis ? redis.get('system:queue_depth') : Promise.resolve(null),
     ]);
 
-    // Agent last run times
+    // Agent last run times — stored in hash by BaseAgent.setStatus()
     const agentKeys = ['nexus', 'seo', 'marketing', 'integration'];
     const agentLastRun: Record<string, string> = {};
     await Promise.all(
       agentKeys.map(async (agent) => {
-        const ts = redis ? await redis.get(`agent:${agent}:last_run`) : null;
-        agentLastRun[agent] = ts ?? 'never';
+        const hash = redis ? await redis.hgetall(`agent:${agent}:status`) : null;
+        agentLastRun[agent] = hash?.lastRun ?? 'never';
       }),
     );
 
@@ -299,20 +299,19 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     const agentStatuses = await Promise.all(
       agentNames.map(async (name) => {
-        const [lastRun, status, nextRun, lastLogs] = redis
+        // agent:{name}:status is stored as a Redis hash (hset by BaseAgent), not a string
+        const [statusHash, lastLogs] = redis
           ? await Promise.all([
-              redis.get(`agent:${name}:last_run`),
-              redis.get(`agent:${name}:status`),
-              redis.get(`agent:${name}:next_run`),
+              redis.hgetall(`agent:${name}:status`),
               redis.lrange(`agent:${name}:logs`, 0, 9),
             ])
-          : [null, null, null, [] as string[]];
+          : [{} as Record<string, string>, [] as string[]];
 
         return {
           name,
-          status: status ?? 'idle',
-          lastRun: lastRun ?? null,
-          nextRun: nextRun ?? null,
+          status: statusHash.status ?? 'idle',
+          lastRun: statusHash.lastRun ?? null,
+          nextRun: statusHash.nextRun ?? null,
           logs: lastLogs.map((l) => {
             try {
               return JSON.parse(l) as Record<string, unknown>;
