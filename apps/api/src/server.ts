@@ -17,6 +17,7 @@ import swaggerUi from '@fastify/swagger-ui';
 
 import { getConfig, getAllowedOrigins } from './config.js';
 import { getRedis, isRedisConfigured } from './lib/redis.js';
+import { runMigrations } from '@osool/db';
 import { webhookRoutes } from './routes/webhook.routes.js';
 import { dataRoutes } from './routes/data.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
@@ -102,6 +103,14 @@ async function build() {
 
 async function start() {
   await build();
+
+  // Run DB migrations on startup
+  try {
+    await runMigrations();
+    app.log.info('✅ Database migrations complete');
+  } catch (err) {
+    app.log.warn({ err }, '⚠️ Database migration failed — continuing anyway');
+  }
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
