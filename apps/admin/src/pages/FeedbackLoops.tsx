@@ -9,8 +9,10 @@ type FeedbackEvent = {
   eventType: string;
   loopType: string | null;
   data: unknown;
-  actionsTriggered: string[] | null;
-  summary: string | null;
+  // DB stores this as an integer (count of actions), not an array
+  actionsTriggered: number | null;
+  // DB stores this as jsonb — { type: string, triggered: number }
+  summary: Record<string, unknown> | null;
   runAt: string | null;
   createdAt: string;
 };
@@ -93,16 +95,18 @@ export function FeedbackLoopsPage() {
             </div>
 
             {ev.summary && (
-              <p className="mt-3 text-sm text-zinc-300">{ev.summary}</p>
+              <p className="mt-3 text-sm text-zinc-300">
+                {typeof ev.summary === 'object'
+                  ? `${ev.summary.type ?? ev.loopType ?? 'loop'}: ${ev.summary.triggered ?? 0} action(s) triggered`
+                  : String(ev.summary)}
+              </p>
             )}
 
-            {ev.actionsTriggered && ev.actionsTriggered.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {ev.actionsTriggered.map((action, i) => (
-                  <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-surface text-green-400">
-                    {action}
-                  </span>
-                ))}
+            {ev.actionsTriggered != null && ev.actionsTriggered > 0 && (
+              <div className="mt-3">
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-surface text-green-400">
+                  {ev.actionsTriggered} action(s) triggered
+                </span>
               </div>
             )}
           </div>

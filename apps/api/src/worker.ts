@@ -1,35 +1,27 @@
-import { createSEOWorker, createScoringWorker, createEmailWorker } from './jobs/queues.js';
+/**
+ * Standalone worker process — used by docker-compose `orchestrator-worker` service.
+ * Uses the same worker registry as server.ts (startWorkers / stopWorkers) so all
+ * 8 BullMQ queues are served from a single consistent implementation.
+ *
+ * Previously this file used the legacy queues.ts with different queue names
+ * (seo-generation, email-nurture) which conflicted with the main queue system.
+ */
+import { startWorkers, stopWorkers } from './jobs/workers.js';
 
 console.log('Starting Osool workers...');
 
-const seoWorker = createSEOWorker();
-const scoringWorker = createScoringWorker();
-const emailWorker = createEmailWorker();
+await startWorkers();
 
-seoWorker.on('completed', (job) => {
-  console.log(`[SEO] Completed: ${job.id} - ${job.returnvalue?.path ?? 'unknown'}`);
-});
-
-seoWorker.on('failed', (job, err) => {
-  console.error(`[SEO] Failed: ${job?.id}`, err.message);
-});
-
-scoringWorker.on('completed', (job) => {
-  console.log(`[Scoring] Session ${job.data.sessionId} → score ${job.returnvalue?.score}`);
-});
-
-emailWorker.on('completed', (job) => {
-  console.log(`[Email] Sent nurture for session ${job.data.sessionId}`);
-});
-
-emailWorker.on('failed', (job, err) => {
-  console.error(`[Email] Failed: ${job?.id}`, err.message);
-});
+console.log('✅ Workers running: intent-processing, lead-scoring, audience-sync, seo-content-gen, email-send, email-trigger, feedback-loop, market-pulse');
 
 process.on('SIGTERM', async () => {
   console.log('Shutting down workers...');
-  await Promise.all([seoWorker.close(), scoringWorker.close(), emailWorker.close()]);
+  await stopWorkers();
   process.exit(0);
 });
 
-console.log('✅ Workers running: seo-generation, lead-scoring, email-nurture');
+process.on('SIGINT', async () => {
+  console.log('Interrupt received, shutting down...');
+  await stopWorkers();
+  process.exit(0);
+});
