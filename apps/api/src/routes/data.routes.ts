@@ -7,7 +7,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import { getConfig } from '../config.js';
-import { safeCompare } from '../lib/auth.js';
+import { safeCompare, extractBearerToken, verifyPlatformToken } from '../lib/auth.js';
 import { getRedis } from '../lib/redis.js';
 import { db } from '@osool/db';
 import {
@@ -16,7 +16,10 @@ import {
   seoContent,
   intentSignals,
   chatSessions,
+  chatMessages,
   funnelEvents,
+  users,
+  notifications,
 } from '@osool/db/schema';
 import { eq, desc, and, gte, count, sql } from 'drizzle-orm';
 import { DEVELOPERS } from '@osool/shared/constants';
@@ -50,12 +53,15 @@ async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promis
 export const dataRoutes: FastifyPluginAsync = async (app) => {
   const rateLimitConfig = { max: 200, timeWindow: '1 minute' };
 
-  // Auth hook for all data routes
+  // Auth hook for all data routes — accepts X-API-Key or Platform Bearer JWT
   app.addHook('preHandler', async (req, reply) => {
     const cfg = getConfig();
-    if (!checkApiKey(req.headers['x-api-key'] as string, cfg.API_KEY)) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
+    // Option 1: X-API-Key header (server-to-server)
+    if (checkApiKey(req.headers['x-api-key'] as string, cfg.API_KEY)) return;
+    // Option 2: Platform Bearer JWT (SSO-lite — user-facing)
+    const bearer = extractBearerToken(req.headers['authorization'] as string | undefined);
+    if (bearer && verifyPlatformToken(bearer)) return;
+    return reply.status(401).send({ error: 'Unauthorized' });
   });
 
   /** GET /data/comparison/:devA/:devB */
@@ -498,6 +504,300 @@ export const dataRoutes: FastifyPluginAsync = async (app) => {
       };
 
       await cacheSet(cacheKey, response, 6 * 3600);
+      return reply.send(response);
+    },
+  );
+
+  /** GET /data/user-context/:userId — cross-session context for a Platform user */
+  app.get<{ Params: { userId: string } }>(
+    '/user-context/:userId',
+    { config: { rateLimit: rateLimitConfig } },
+    async (req, reply) => {
+      const { userId } = req.params;
+      const cacheKey = `user-context:${userId}`;
+      const cached = await cacheGet(`data:${cacheKey}`);
+      if (cached) return reply.send(cached);
+
+      // Find orchestrator user by platformUserId
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.platformUserId, userId))
+        .limit(1);
+
+      // Gather all intent signals for this user (via funnel events → sessions)
+      const recentSignals = await db
+        .select()
+        .from(intentSignals)
+        .where(
+          sql`${intentSignals.sessionId} IN (
+            SELECT ${funnelEvents.sessionId} FROM ${funnelEvents}
+            WHERE ${funnelEvents.userId} = ${userId}
+            AND ${funnelEvents.sessionId} IS NOT NULL
+          )`
+        )
+        .orderBy(desc(intentSignals.createdAt))
+        .limit(50);
+
+      // Aggregate preferences
+      const devSet = new Set<string>();
+      const areaSet = new Set<string>();
+      const intentTypes = new Set<string>();
+      let maxScore = 0;
+
+      for (const signal of recentSignals) {
+        const entities = signal.entities as Record<string, unknown>;
+        if (Array.isArray(entities.developers)) {
+          for (const d of entities.developers as string[]) devSet.add(d);
+        }
+        if (Array.isArray(entities.locations)) {
+          for (const l of entities.locations as string[]) areaSet.add(l);
+        }
+        if (signal.intentType) intentTypes.add(signal.intentType);
+        maxScore = Math.max(maxScore, signal.confidence ?? 0);
+      }
+
+      // Get the most recent lead score from chat sessions
+      let leadScore = maxScore;
+      try {
+        const sessions = await db
+          .select({ id: chatSessions.id, leadScore: chatSessions.leadScore })
+          .from(chatSessions)
+          .where(eq(chatSessions.userId, userId))
+          .orderBy(desc(chatSessions.createdAt))
+          .limit(1);
+        if (sessions[0]?.leadScore) {
+          leadScore = sessions[0].leadScore;
+        }
+      } catch { /* DB failure — use computed score */ }
+
+      // Determine lead tier
+      const tier = leadScore >= 85 ? 'hot' : leadScore >= 60 ? 'warm' : leadScore >= 30 ? 'nurture' : 'cold';
+
+      const response = {
+        userId,
+        orchestratorUserId: user?.id ?? null,
+        email: user?.email ?? null,
+        icpSegment: user?.icpSegment ?? (recentSignals[0]?.segment ?? 'first_time_buyer'),
+        leadScore,
+        tier,
+        preferredDevelopers: [...devSet].slice(0, 10),
+        preferredAreas: [...areaSet].slice(0, 10),
+        intentTypes: [...intentTypes],
+        signalCount: recentSignals.length,
+        suggestedTopics: buildSuggestedTopics([...devSet], [...areaSet]),
+      };
+
+      await cacheSet(cacheKey, response, 5 * 60); // 5 min TTL
+      return reply.send(response);
+    },
+  );
+
+  /** GET /data/notifications/:userId — fetch unread notifications for a Platform user */
+  app.get<{ Params: { userId: string }; Querystring: { limit?: string } }>(
+    '/notifications/:userId',
+    async (request, reply) => {
+      const { userId } = request.params;
+      const limit = Math.min(parseInt(request.query.limit ?? '20', 10) || 20, 50);
+
+      // Find orchestrator user by platformUserId
+      const userRows = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.platformUserId, userId))
+        .limit(1);
+
+      if (userRows.length === 0) {
+        return reply.send({ notifications: [], unreadCount: 0 });
+      }
+
+      const orchestratorUserId = userRows[0].id;
+
+      const rows = await db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.userId, orchestratorUserId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit);
+
+      const unreadCount = rows.filter((n) => !n.read).length;
+
+      return reply.send({
+        notifications: rows.map((n) => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          titleAr: n.titleAr,
+          body: n.body,
+          bodyAr: n.bodyAr,
+          data: n.data,
+          read: n.read,
+          priority: n.priority,
+          createdAt: n.createdAt,
+        })),
+        unreadCount,
+      });
+    },
+  );
+
+  /** PATCH /data/notifications/:notifId/read — mark a notification as read */
+  app.patch<{ Params: { notifId: string } }>(
+    '/notifications/:notifId/read',
+    async (request, reply) => {
+      const { notifId } = request.params;
+      await db
+        .update(notifications)
+        .set({ read: true })
+        .where(eq(notifications.id, notifId));
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * GET /data/live-properties/:location — Live property listings from Platform
+   *
+   * Returns real-time property data for a given location by querying
+   * the Platform bridge. Used to embed live listings in SEO area guides.
+   */
+  app.get<{ Params: { location: string }; Querystring: { limit?: string; developer?: string } }>(
+    '/live-properties/:location',
+    { config: { rateLimit: rateLimitConfig } },
+    async (req, reply) => {
+      const { location } = req.params;
+      const limit = Math.min(parseInt(req.query.limit ?? '10', 10) || 10, 50);
+      const developer = req.query.developer;
+      const cacheKey = `live-props:${location}:${developer ?? 'all'}:${limit}`;
+      const cached = await cacheGet(`data:${cacheKey}`);
+      if (cached) return reply.send(cached);
+
+      // Try orchestrator's own properties DB first
+      const localProps = await db
+        .select()
+        .from(properties)
+        .where(eq(properties.location, location))
+        .limit(limit);
+
+      // Enrich with Platform data via bridge
+      let platformProps: Record<string, unknown>[] = [];
+      try {
+        const { fetchLiveProperties } = await import('../services/platform-bridge.service.js');
+        platformProps = await fetchLiveProperties({ location, developer, limit });
+      } catch {
+        // Bridge unavailable — use local data only
+      }
+
+      const response = {
+        location,
+        localProperties: localProps.map((p) => ({
+          id: p.id,
+          name: p.projectName,
+          nameAr: p.projectNameAr,
+          developer: p.developerId,
+          priceMin: p.priceMin,
+          priceMax: p.priceMax,
+          bedrooms: p.bedrooms,
+          deliveryDate: p.deliveryDate,
+          slug: p.slug,
+        })),
+        platformProperties: platformProps,
+        totalLocal: localProps.length,
+        totalPlatform: platformProps.length,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      await cacheSet(cacheKey, response, 1800); // 30 min TTL
+      return reply.send(response);
+    },
+  );
+
+  /**
+   * GET /data/enriched-seo/:pageType/:slug — SEO content with live data overlay
+   *
+   * Returns the generated SEO content PLUS real-time property data
+   * so area guides and developer profiles show live "Top ROI" listings.
+   */
+  app.get<{
+    Params: { pageType: string; slug: string };
+    Querystring: { locale?: string };
+  }>(
+    '/enriched-seo/:pageType/:slug',
+    { config: { rateLimit: rateLimitConfig } },
+    async (req, reply) => {
+      const { pageType, slug } = req.params;
+      const locale = req.query.locale ?? 'en';
+      const cacheKey = `enriched-seo:${pageType}:${slug}:${locale}`;
+      const cached = await cacheGet(`data:${cacheKey}`);
+      if (cached) return reply.send(cached);
+
+      // 1. Get SEO content
+      const [seoRow] = await db
+        .select()
+        .from(seoContent)
+        .where(
+          and(
+            eq(seoContent.pageType, pageType),
+            eq(seoContent.slug, slug),
+            eq(seoContent.locale, locale),
+            eq(seoContent.status, 'published'),
+          ),
+        )
+        .orderBy(desc(seoContent.version))
+        .limit(1);
+
+      if (!seoRow) {
+        return reply.status(404).send({ error: 'SEO content not found' });
+      }
+
+      // 2. Fetch live data overlay based on page type
+      let liveData: Record<string, unknown> = {};
+      try {
+        const bridge = await import('../services/platform-bridge.service.js');
+
+        if (pageType === 'location_guide' || pageType === 'roi') {
+          // Fetch live properties + ROI for this area
+          const [props, areaROI] = await Promise.all([
+            bridge.fetchTopROIProperties(slug, 5),
+            bridge.fetchPlatformAreaROI(slug),
+          ]);
+          liveData = {
+            topROIProperties: props,
+            areaMetrics: areaROI,
+          };
+        } else if (pageType === 'developer_profile') {
+          const devData = await bridge.fetchPlatformDeveloper(slug);
+          liveData = { developerProfile: devData };
+        } else if (pageType === 'comparison') {
+          // For comparisons like "emaar-vs-sodic"
+          const [devA, devB] = slug.split('-vs-');
+          if (devA && devB) {
+            const [dataA, dataB] = await Promise.all([
+              bridge.fetchPlatformDeveloper(devA),
+              bridge.fetchPlatformDeveloper(devB),
+            ]);
+            liveData = { developerA: dataA, developerB: dataB };
+          }
+        }
+      } catch {
+        // Bridge unavailable — serve SEO content without live overlay
+      }
+
+      const response = {
+        seo: {
+          pageType: seoRow.pageType,
+          slug: seoRow.slug,
+          locale: seoRow.locale,
+          title: seoRow.title,
+          description: seoRow.description,
+          body: seoRow.body,
+          schemaMarkup: seoRow.schemaMarkup,
+          version: seoRow.version,
+          generatedAt: seoRow.createdAt.toISOString(),
+        },
+        liveData,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      await cacheSet(cacheKey, response, 1800); // 30 min TTL
       return reply.send(response);
     },
   );

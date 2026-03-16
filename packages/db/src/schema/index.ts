@@ -1,4 +1,5 @@
 export { users } from './users.js';
+export { notifications } from './notifications.js';
 export {
   developers,
   properties,

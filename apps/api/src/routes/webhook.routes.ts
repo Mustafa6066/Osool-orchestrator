@@ -14,9 +14,10 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { getConfig } from '../config.js';
 import { safeCompare } from '../lib/auth.js';
-import { getIntentQueue, getAudienceSyncQueue } from '../jobs/queue.js';
+import { getRedis } from '../lib/redis.js';
+import { getIntentQueue, getAudienceSyncQueue, getScraperEventQueue } from '../jobs/queue.js';
 import { db } from '@osool/db';
-import { intentSignals, funnelEvents, chatSessions, waitlist as waitlistTable } from '@osool/db/schema';
+import { intentSignals, funnelEvents, chatSessions, waitlist as waitlistTable, users } from '@osool/db/schema';
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
@@ -89,6 +90,16 @@ const adClickSchema = z.object({
   utmParams: z.record(z.string()),
   landingUrl: z.string(),
   timestamp: z.string(),
+});
+
+const userMemorySchema = z.object({
+  eventType: z.literal('user_memory_update'),
+  userId: z.string().min(1),
+  budgetMin: z.number().optional(),
+  budgetMax: z.number().optional(),
+  preferredAreas: z.array(z.string()).optional(),
+  preferredDevelopers: z.array(z.string()).optional(),
+  preferencesText: z.string().optional(),
 });
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
@@ -268,6 +279,14 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
         source: payload.source,
       }).onConflictDoNothing();
 
+      // Upsert orchestrator user linked to Platform userId
+      await db.insert(users).values({
+        platformUserId: payload.userId,
+        email: payload.email,
+        name: payload.name,
+        role: 'visitor',
+      }).onConflictDoNothing();
+
       if (payload.eventType === 'waitlist_join') {
         await db.insert(waitlistTable).values({
           email: payload.email,
@@ -341,6 +360,81 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
       }).onConflictDoNothing();
 
       return reply.status(202).send({ accepted: true });
+    },
+  );
+
+  /** POST /webhooks/user-memory — sync user preferences from Platform */
+  app.post(
+    '/user-memory',
+    { config: { rateLimit: rateLimitConfig } },
+    async (req, reply) => {
+      const cfg = getConfig();
+      if (!checkWebhookSecret(req.headers['x-webhook-secret'] as string, cfg.WEBHOOK_SECRET)) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const parsed = userMemorySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid payload', details: parsed.error.flatten() });
+      }
+
+      const payload = parsed.data;
+
+      // Update orchestrator user metadata with preferences
+      const metadata: Record<string, unknown> = {};
+      if (payload.budgetMin != null) metadata.budgetMin = payload.budgetMin;
+      if (payload.budgetMax != null) metadata.budgetMax = payload.budgetMax;
+      if (payload.preferredAreas) metadata.preferredAreas = payload.preferredAreas;
+      if (payload.preferredDevelopers) metadata.preferredDevelopers = payload.preferredDevelopers;
+      if (payload.preferencesText) metadata.preferencesText = payload.preferencesText;
+
+      await db.update(users)
+        .set({
+          metadata,
+          icpSegment: payload.budgetMax && payload.budgetMax > 10_000_000 ? 'domestic_hnw' : undefined,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.platformUserId, payload.userId));
+
+      // Invalidate user context cache
+      try {
+        const redis = getRedis();
+        await redis.del(`data:user-context:${payload.userId}`);
+      } catch { /* non-critical */ }
+
+      return reply.status(202).send({ accepted: true });
+    },
+  );
+
+  // ── 7. Scraper Event (Platform → Orchestrator closed-loop trigger) ────────
+  const scraperEventSchema = z.object({
+    eventType: z.enum(['property_scrape_complete', 'economic_update', 'geopolitical_shift']),
+    runId: z.string().optional(),
+    totalProperties: z.number().optional(),
+    significantChanges: z.number().optional(),
+    indicators: z.record(z.number()).optional(),
+    sentimentShift: z.number().optional(),
+  });
+
+  app.post<{ Body: z.infer<typeof scraperEventSchema> }>(
+    '/webhooks/scraper-event',
+    async (req, reply) => {
+      const cfg = getConfig();
+      if (!checkWebhookSecret(req.headers['x-webhook-secret'] as string, cfg.WEBHOOK_SECRET)) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const parsed = scraperEventSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid payload', details: parsed.error.flatten() });
+      }
+
+      const queue = getScraperEventQueue();
+      await queue.add('scraper-event', parsed.data, {
+        priority: 2,
+      });
+
+      return reply.status(202).send({ accepted: true, eventType: parsed.data.eventType });
     },
   );
 };

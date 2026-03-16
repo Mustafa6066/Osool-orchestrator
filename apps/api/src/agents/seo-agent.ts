@@ -103,10 +103,29 @@ Developer B: ${dev2.name}, founded ${dev2.founded}, ${dev2.projectCount} project
 
   const locale = input.locale === 'ar' ? 'Arabic' : 'English';
 
+  const glossaryNote = input.locale === 'ar'
+    ? `Use Egyptian Arabic real estate terminology naturally:
+- لقطة (La2ta) = bargain/catch deal
+- ماباع (Maba7) = sold out by developer
+- نص تشطيب (Noss-Tashteeb) = semi-finished/core & shell
+- متشطب (Metshatteb) = fully finished
+- استلام فوري (Estilam Fawri) = immediate delivery
+- تقسيط (Ta2seet) = installment plan
+- مقدم (Mo2addam) = down payment
+- عداد (3addad) = utility meters (delivery readiness indicator)
+- كمباوند (Compound) = gated community
+- عائد إيجاري (3a2ed Eigari) = rental yield
+Write in Egyptian dialect, NOT Modern Standard Arabic.`
+    : `When relevant, introduce Egyptian real estate terms parenthetically to educate international investors:
+- "catch deal (لقطة – la2ta)" for bargains
+- "semi-finished (نص تشطيب – noss-tashteeb)" for core & shell
+- "gated community (كمباوند – compound)" for developments
+This builds cultural rapport with readers exploring the Egyptian market.`;
+
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 4096,
-    system: `You are an expert SEO content writer for Egyptian real estate. Write in ${locale}. Be factual, data-driven, and optimized for search engines. Include natural keyword usage.`,
+    system: `You are an expert SEO content writer for Egyptian real estate. Write in ${locale}. Be factual, data-driven, and optimized for search engines. Include natural keyword usage.\n\n${glossaryNote}`,
     messages: [{
       role: 'user',
       content: `${prompt}\n\nContext:\n${context}\n\nGenerate the page content now. Return JSON with keys: title, metaDescription, h1, content`,

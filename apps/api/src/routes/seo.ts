@@ -5,6 +5,7 @@ import { seoPages, keywords } from '@osool/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { seoQueue } from '../jobs/queues.js';
 import type { SEOPageInput } from '../agents/seo-agent.js';
+import { fetchLiveProperties } from '../services/platform-bridge.service.js';
 
 export const seoRouter = router({
   getPage: publicProcedure
@@ -15,7 +16,25 @@ export const seoRouter = router({
         .from(seoPages)
         .where(eq(seoPages.path, input.path))
         .limit(1);
-      return page ?? null;
+      
+      if (!page) return null;
+
+      // Enhance with live runtime properties for better CX
+      let liveProperties = [];
+      try {
+        if (page.pageType === 'developer_profile' && page.metadata && typeof page.metadata === 'object' && 'developerId' in page.metadata) {
+           liveProperties = await fetchLiveProperties({ developer: page.metadata.developerId as string, limit: 3 });
+        } else if (page.pageType === 'location_guide' && page.metadata && typeof page.metadata === 'object' && 'locationId' in page.metadata) {
+           liveProperties = await fetchLiveProperties({ location: page.metadata.locationId as string, limit: 3 });
+        }
+      } catch (err) {
+        console.error('Failed to augment SEO page with live properties', err);
+      }
+
+      return {
+        ...page,
+        liveProperties
+      };
     }),
 
   listPages: publicProcedure

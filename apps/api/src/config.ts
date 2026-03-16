@@ -36,6 +36,9 @@ const schema = z.object({
   // Osool backend URL (used to proxy admin login)
   OSOOL_API_URL: z.string().url().default('https://osool-production.up.railway.app'),
 
+  // Osool Platform JWT secret (same key as backend's JWT_SECRET_KEY) — enables SSO-lite
+  PLATFORM_JWT_SECRET: z.string().min(32).optional(),
+
   // Webhook + Data API security — required in production, optional in dev
   WEBHOOK_SECRET: z.string().min(16, 'WEBHOOK_SECRET must be at least 16 characters').optional()
     .refine(

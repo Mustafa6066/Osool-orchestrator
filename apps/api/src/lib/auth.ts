@@ -81,3 +81,29 @@ export function safeCompare(a: string, b: string): boolean {
   const hmacB = createHmac('sha256', key).update(b).digest();
   return timingSafeEqual(hmacA, hmacB);
 }
+
+// ── Osool Platform JWT (SSO-lite) ────────────────────────────────────────────
+
+export interface PlatformTokenPayload {
+  sub: string;   // user email
+  role: string;  // e.g. 'investor', 'admin'
+  jti: string;
+  iat: number;
+  exp: number;
+}
+
+/**
+ * Verify a JWT issued by the Osool Platform backend.
+ * Requires PLATFORM_JWT_SECRET to be set; returns null if not configured or invalid.
+ */
+export function verifyPlatformToken(token: string): PlatformTokenPayload | null {
+  const secret = getConfig().PLATFORM_JWT_SECRET;
+  if (!secret) return null;
+  try {
+    const payload = jwt.verify(token, secret, { algorithms: ['HS256'] }) as PlatformTokenPayload;
+    if (!payload.sub) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}

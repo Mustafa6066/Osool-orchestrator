@@ -1,8 +1,9 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { getDashboard } from '../api/client';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { getDashboard, getUnifiedDashboard } from '../api/client';
 import { usePolling } from '../hooks/usePolling';
 
 type DashboardData = Awaited<ReturnType<typeof getDashboard>>;
+type UnifiedData = Awaited<ReturnType<typeof getUnifiedDashboard>>;
 
 function MetricCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
@@ -20,6 +21,7 @@ function StatusDot({ ok }: { ok: boolean }) {
 
 export function DashboardPage() {
   const { data, error, loading } = usePolling<DashboardData>(getDashboard, 30_000);
+  const { data: unified } = usePolling<UnifiedData>(getUnifiedDashboard, 60_000);
 
   if (loading && !data) {
     return (
@@ -137,6 +139,95 @@ export function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {/* Unified Platform + Lead Distribution */}
+      {unified && (
+        <div className="grid lg:grid-cols-2 gap-8 mt-10">
+          {/* Platform Health */}
+          <div className="bg-surface-card rounded-xl border border-border p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-zinc-300">Platform Health</h2>
+              <span className="text-[10px] text-zinc-600">
+                Updated {new Date(unified.lastUpdated).toLocaleTimeString()}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-zinc-500 mb-1">Properties</p>
+                <p className="text-lg font-semibold text-zinc-100">{Number(unified.platform.totalProperties).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500 mb-1">Platform Users</p>
+                <p className="text-lg font-semibold text-zinc-100">{Number(unified.platform.totalPlatformUsers).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500 mb-1">Transactions</p>
+                <p className="text-lg font-semibold text-zinc-100">{Number(unified.platform.totalTransactions).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500 mb-1">Chat Volume</p>
+                <p className="text-lg font-semibold text-zinc-100">{Number(unified.platform.chatVolume).toLocaleString()}</p>
+              </div>
+            </div>
+            {unified.platform.avgResponseTime > 0 && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <p className="text-xs text-zinc-500 mb-1">Avg Response Time</p>
+                <p className="text-sm font-semibold text-zinc-200">{Number(unified.platform.avgResponseTime).toFixed(1)}s</p>
+              </div>
+            )}
+          </div>
+
+          {/* Lead Distribution */}
+          <div className="bg-surface-card rounded-xl border border-border p-6">
+            <h2 className="text-sm font-semibold text-zinc-300 mb-4">Lead Distribution</h2>
+            {(() => {
+              const ld = unified.orchestrator.leadDistribution;
+              const total = ld.hot + ld.warm + ld.nurture + ld.cold;
+              const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#6b7280'];
+              const pieData = [
+                { name: 'Hot', value: ld.hot },
+                { name: 'Warm', value: ld.warm },
+                { name: 'Nurture', value: ld.nurture },
+                { name: 'Cold', value: ld.cold },
+              ].filter(d => d.value > 0);
+
+              if (total === 0) {
+                return <p className="text-xs text-zinc-600 text-center py-8">No scored leads yet</p>;
+              }
+
+              return (
+                <div className="flex items-center gap-6">
+                  <ResponsiveContainer width={140} height={140}>
+                    <PieChart>
+                      <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={2}>
+                        {pieData.map((_, i) => (
+                          <Cell key={i} fill={COLORS[['Hot','Warm','Nurture','Cold'].indexOf(pieData[i].name)]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#111113', border: '1px solid #27272a', borderRadius: 10, color: '#f4f4f5', fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex-1 space-y-2">
+                    {[
+                      { label: 'Hot (≥85)', value: ld.hot, color: 'bg-red-500' },
+                      { label: 'Warm (60–84)', value: ld.warm, color: 'bg-amber-500' },
+                      { label: 'Nurture (30–59)', value: ld.nurture, color: 'bg-blue-500' },
+                      { label: 'Cold (<30)', value: ld.cold, color: 'bg-zinc-500' },
+                    ].map(tier => (
+                      <div key={tier.label} className="flex items-center gap-2 text-xs">
+                        <span className={`w-2 h-2 rounded-full ${tier.color}`} />
+                        <span className="text-zinc-400 flex-1">{tier.label}</span>
+                        <span className="text-zinc-200 font-semibold tabular-nums">{tier.value}</span>
+                        <span className="text-zinc-600 w-10 text-right">{total > 0 ? Math.round(tier.value / total * 100) : 0}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,6 +16,8 @@ import {
   type EmailTriggerJobData,
   type FeedbackLoopJobData,
   type MarketPulseJobData,
+  type NotificationPushJobData,
+  type ScraperEventJobData,
   getEmailSendQueue,
 } from './queue.js';
 
@@ -58,6 +60,16 @@ async function processFeedbackLoopJob(job: Job<FeedbackLoopJobData>) {
 async function processMarketPulseJob(job: Job<MarketPulseJobData>) {
   const { runMarketPulse } = await import('./handlers/market-pulse.job.js');
   return runMarketPulse(job.data);
+}
+
+async function processNotificationPushJob(job: Job<NotificationPushJobData>) {
+  const { runNotificationPush } = await import('./handlers/notification-push.job.js');
+  return runNotificationPush(job.data);
+}
+
+async function processScraperEventJob(job: Job<ScraperEventJobData>) {
+  const { processScraperEvent } = await import('./handlers/scraper-event.job.js');
+  return processScraperEvent(job.data);
 }
 
 // ── Worker registry ───────────────────────────────────────────────────────────
@@ -120,6 +132,24 @@ export async function startWorkers(): Promise<void> {
     concurrency: 1,
   });
 
+  const notificationPushWorker = new Worker<NotificationPushJobData>(
+    'notification-push',
+    processNotificationPushJob,
+    {
+      connection: conn,
+      concurrency: 1,
+    },
+  );
+
+  const scraperEventWorker = new Worker<ScraperEventJobData>(
+    'scraper-event',
+    processScraperEventJob,
+    {
+      connection: conn,
+      concurrency: 2,
+    },
+  );
+
   for (const worker of [
     intentWorker,
     scoringWorker,
@@ -129,6 +159,8 @@ export async function startWorkers(): Promise<void> {
     emailTriggerWorker,
     feedbackLoopWorker,
     marketPulseWorker,
+    notificationPushWorker,
+    scraperEventWorker,
   ]) {
     worker.on('completed', (job) => {
       console.info(`[${worker.name}] Job ${job.id} completed`);
@@ -157,16 +189,24 @@ export async function stopWorkers(): Promise<void> {
 // ── Scheduled agent jobs ──────────────────────────────────────────────────────
 
 async function scheduleAgentJobs(): Promise<void> {
-  const { getMarketPulseQueue, getFeedbackLoopQueue } = await import('./queue.js');
+  const { getMarketPulseQueue, getFeedbackLoopQueue, getNotificationPushQueue } = await import('./queue.js');
 
   const marketPulseQ = getMarketPulseQueue();
   const feedbackLoopQ = getFeedbackLoopQueue();
+  const notificationPushQ = getNotificationPushQueue();
 
   // Nexus agent: run market pulse every hour
   await marketPulseQ.add(
     'market-pulse-hourly',
     {},
     { repeat: { pattern: '0 * * * *' } },
+  );
+
+  // Notification push: run 5 min after market pulse
+  await notificationPushQ.add(
+    'notification-push-hourly',
+    { triggeredBy: 'scheduled' },
+    { repeat: { pattern: '5 * * * *' } },
   );
 
   // Feedback loops: run each type every 6 hours

@@ -118,6 +118,29 @@ export async function getDashboard() {
   }>('/admin/dashboard');
 }
 
+export async function getUnifiedDashboard() {
+  return request<{
+    orchestrator: {
+      totalUsers: number;
+      totalChatSessions: number;
+      totalIntentSignals: number;
+      waitlistCount: number;
+      leadDistribution: { hot: number; warm: number; nurture: number; cold: number };
+      trending: { developers: { name: string; count: number }[]; locations: { name: string; count: number }[] };
+    };
+    platform: {
+      totalProperties: number;
+      totalPlatformUsers: number;
+      totalTransactions: number;
+      chatVolume: number;
+      avgResponseTime: number;
+      topLocations: unknown[];
+      recentActivity: unknown[];
+    };
+    lastUpdated: string;
+  }>('/admin/unified-dashboard');
+}
+
 // ── Agents ────────────────────────────────────────────────────────────────────
 
 export async function getAgents() {

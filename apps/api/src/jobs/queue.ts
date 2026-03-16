@@ -13,6 +13,7 @@
  *  email-trigger        — evaluate whether to start an email sequence
  *  feedback-loop        — run a single feedback loop analysis step
  *  market-pulse         — hourly market data aggregation (Nexus agent)
+ *  notification-push    — match trending data against user prefs, create alerts
  */
 
 import { Queue } from 'bullmq';
@@ -38,6 +39,8 @@ let emailSendQueue: Queue | null = null;
 let emailTriggerQueue: Queue | null = null;
 let feedbackLoopQueue: Queue | null = null;
 let marketPulseQueue: Queue | null = null;
+let notificationPushQueue: Queue | null = null;
+let scraperEventQueue: Queue | null = null;
 
 // ── Factory functions ─────────────────────────────────────────────────────────
 
@@ -121,6 +124,26 @@ export function getMarketPulseQueue(): Queue<MarketPulseJobData> {
   return marketPulseQueue as Queue<MarketPulseJobData>;
 }
 
+export function getNotificationPushQueue(): Queue<NotificationPushJobData> {
+  if (!notificationPushQueue) {
+    notificationPushQueue = new Queue<NotificationPushJobData>('notification-push', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return notificationPushQueue as Queue<NotificationPushJobData>;
+}
+
+export function getScraperEventQueue(): Queue<ScraperEventJobData> {
+  if (!scraperEventQueue) {
+    scraperEventQueue = new Queue<ScraperEventJobData>('scraper-event', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return scraperEventQueue as Queue<ScraperEventJobData>;
+}
+
 // ── Close all queues ──────────────────────────────────────────────────────────
 
 export async function closeAllQueues(): Promise<void> {
@@ -134,6 +157,8 @@ export async function closeAllQueues(): Promise<void> {
       emailTriggerQueue,
       feedbackLoopQueue,
       marketPulseQueue,
+      notificationPushQueue,
+      scraperEventQueue,
     ]
       .filter(Boolean)
       .map((q) => q!.close()),
@@ -220,5 +245,19 @@ export interface FeedbackLoopJobData {
 
 export interface MarketPulseJobData {
   forceRun?: boolean;
+  triggeredBy?: string;
+}
+
+export interface NotificationPushJobData {
+  triggeredBy?: string;
+}
+
+export interface ScraperEventJobData {
+  eventType: 'property_scrape_complete' | 'economic_update' | 'geopolitical_shift';
+  runId?: string;
+  totalProperties?: number;
+  significantChanges?: number;
+  indicators?: Record<string, number>;
+  sentimentShift?: number;
   triggeredBy?: string;
 }

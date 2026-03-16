@@ -289,6 +289,93 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(response);
   });
 
+  // ── Unified Dashboard (Platform + Orchestrator) ───────────────────────────
+
+  app.get('/unified-dashboard', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    // 1. Get orchestrator metrics (from the regular dashboard data)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [
+      totalUsersRow,
+      totalSessionsRow,
+      totalIntentsRow,
+      waitlistRow,
+    ] = await Promise.all([
+      db.select({ c: count() }).from(users),
+      db.select({ c: count() }).from(chatSessions),
+      db.select({ c: count() }).from(intentSignals),
+      db.select({ c: count() }).from(waitlist),
+    ]);
+
+    // 2. Fetch Platform dashboard metrics via bridge
+    let platformMetrics: Record<string, unknown> = {};
+    try {
+      const { fetchPlatformDashboard } = await import('../services/platform-bridge.service.js');
+      const data = await fetchPlatformDashboard();
+      if (data) platformMetrics = data;
+    } catch {
+      // Bridge unavailable
+    }
+
+    // 3. Get lead distribution
+    const leadTiers = {
+      hot: 0,
+      warm: 0,
+      nurture: 0,
+      cold: 0,
+    };
+
+    try {
+      const sessions = await db
+        .select({ leadScore: chatSessions.leadScore })
+        .from(chatSessions)
+        .where(sql`${chatSessions.leadScore} > 0`)
+        .limit(1000);
+
+      for (const s of sessions) {
+        const score = s.leadScore ?? 0;
+        if (score >= 85) leadTiers.hot++;
+        else if (score >= 60) leadTiers.warm++;
+        else if (score >= 30) leadTiers.nurture++;
+        else leadTiers.cold++;
+      }
+    } catch {
+      // Ignore
+    }
+
+    // 4. Get trending data
+    const redis = isRedisConfigured() ? getRedis() : null;
+    const trendingRaw = redis ? await redis.get('nexus:trending') : null;
+    const trending = trendingRaw ? JSON.parse(trendingRaw) : {};
+
+    return reply.send({
+      orchestrator: {
+        totalUsers: Number(totalUsersRow[0]?.c ?? 0),
+        totalChatSessions: Number(totalSessionsRow[0]?.c ?? 0),
+        totalIntentSignals: Number(totalIntentsRow[0]?.c ?? 0),
+        waitlistCount: Number(waitlistRow[0]?.c ?? 0),
+        leadDistribution: leadTiers,
+        trending: {
+          developers: (trending.trendingDevelopers ?? []).slice(0, 5),
+          locations: (trending.trendingLocations ?? []).slice(0, 5),
+        },
+      },
+      platform: {
+        totalProperties: platformMetrics.total_properties ?? platformMetrics.totalProperties ?? 0,
+        totalPlatformUsers: platformMetrics.total_users ?? platformMetrics.totalUsers ?? 0,
+        totalTransactions: platformMetrics.total_transactions ?? platformMetrics.totalTransactions ?? 0,
+        chatVolume: platformMetrics.chat_volume ?? platformMetrics.chatVolume ?? 0,
+        avgResponseTime: platformMetrics.avg_response_time ?? platformMetrics.avgResponseTime ?? 0,
+        topLocations: platformMetrics.top_locations ?? platformMetrics.topLocations ?? [],
+        recentActivity: platformMetrics.recent_activity ?? platformMetrics.recentActivity ?? [],
+      },
+      lastUpdated: new Date().toISOString(),
+    });
+  });
+
   // ── Agents ────────────────────────────────────────────────────────────────
 
   app.get('/agents', async (req, reply) => {
