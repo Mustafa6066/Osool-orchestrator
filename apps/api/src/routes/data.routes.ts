@@ -564,7 +564,7 @@ export const dataRoutes: FastifyPluginAsync = async (app) => {
           .select({ id: chatSessions.id, leadScore: chatSessions.leadScore })
           .from(chatSessions)
           .where(eq(chatSessions.userId, userId))
-          .orderBy(desc(chatSessions.createdAt))
+          .orderBy(desc(chatSessions.startedAt))
           .limit(1);
         if (sessions[0]?.leadScore) {
           leadScore = sessions[0].leadScore;
@@ -678,10 +678,11 @@ export const dataRoutes: FastifyPluginAsync = async (app) => {
         .limit(limit);
 
       // Enrich with Platform data via bridge
-      let platformProps: Record<string, unknown>[] = [];
+      let platformProps: Array<Record<string, unknown>> = [];
       try {
         const { fetchLiveProperties } = await import('../services/platform-bridge.service.js');
-        platformProps = await fetchLiveProperties({ location, developer, limit });
+        const fetched = await fetchLiveProperties({ location, developer, limit });
+        platformProps = fetched as unknown as Array<Record<string, unknown>>;
       } catch {
         // Bridge unavailable — use local data only
       }

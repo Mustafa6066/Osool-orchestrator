@@ -118,7 +118,7 @@ export async function buildUserChatContext(userId: string): Promise<{
     .select()
     .from(chatSessions)
     .where(eq(chatSessions.userId, userId))
-    .orderBy(desc(chatSessions.createdAt))
+    .orderBy(desc(chatSessions.startedAt))
     .limit(10);
 
   const sessionIds = sessions.map((s: { id: string }) => s.id);
