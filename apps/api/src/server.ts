@@ -23,8 +23,8 @@ import { dataRoutes } from './routes/data.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
 import { startWorkers, stopWorkers } from './jobs/workers.js';
-import { createSEOWorker, createScoringWorker, createEmailWorker } from './jobs/queues.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
+import { bootstrapPlugins } from './agents/brain/plugins/registry.js';
 
 const cfg = getConfig();
 
@@ -37,6 +37,8 @@ export const app = Fastify({
         : undefined,
   },
   trustProxy: true,
+  // Security: Limit request body size to prevent DoS via large payloads
+  bodyLimit: 1_048_576, // 1 MB (default is 1MB, explicit for clarity)
 });
 
 async function build() {
@@ -114,6 +116,10 @@ async function start() {
     app.log.warn({ err }, '⚠️ Database migration failed — continuing anyway');
   }
 
+  // Bootstrap multi-agent plugins
+  bootstrapPlugins();
+  app.log.info('✅ Domain specialist plugins registered');
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     app.log.info(`Received ${signal}, shutting down gracefully…`);
@@ -133,12 +139,6 @@ async function start() {
     // Start BullMQ workers
     await startWorkers();
     app.log.info('✅ Background workers started');
-
-    // Start tRPC queue workers (seo-generation, lead-scoring, email-nurture)
-    createSEOWorker();
-    createScoringWorker();
-    createEmailWorker();
-    app.log.info('✅ tRPC queue workers started');
 
     // Start autonomous agent scheduler
     startScheduler(app.log);

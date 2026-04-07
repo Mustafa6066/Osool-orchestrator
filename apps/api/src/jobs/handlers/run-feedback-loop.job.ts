@@ -46,6 +46,9 @@ export async function runFeedbackLoop(data: FeedbackLoopJobData): Promise<{ type
     case 'content_gap_analysis':
       actionsTriggered = await contentGapAnalysis();
       break;
+    case 'icp_learning_update':
+      actionsTriggered = await icpLearningUpdate();
+      break;
   }
 
   // Record feedback loop event
@@ -224,4 +227,15 @@ async function contentGapAnalysis(): Promise<number> {
   }
 
   return gaps.length;
+}
+
+/** Run ICP learning analysis and store weight recommendations. */
+async function icpLearningUpdate(): Promise<number> {
+  const { generateICPReport } = await import('../../services/icp-learning.service.js');
+  const redis = getRedis();
+
+  const report = await generateICPReport(30);
+  await redis.set('icp:learning:latest', JSON.stringify(report), 'EX', 7 * 86400);
+
+  return report.recommendations.length;
 }

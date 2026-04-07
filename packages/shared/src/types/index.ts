@@ -59,3 +59,30 @@ export type {
   EmailStep,
   WaitlistEntry,
 } from './funnel.js';
+export type {
+  ExperimentStatus,
+  ExperimentAgent,
+  ExperimentVariant,
+  ExperimentDataPoint,
+  ExperimentResult,
+  PlaybookEntry,
+  ExperimentSuggestion,
+} from './experiment.js';
+export type {
+  CROPageType,
+  CRODimensionScores,
+  CROFinding,
+  CROFix,
+  CROAuditResult,
+} from './cro.js';
+export type {
+  AgentPluginSlot,
+  AgentContext,
+  ReasoningStep,
+  AgentResult,
+  AgentPlugin,
+  PluginHealthStatus,
+  ConsensusResult,
+  PluginRegistryEntry,
+  LLMCostLogEntry,
+} from './agent-plugin.js';

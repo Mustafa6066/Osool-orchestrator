@@ -7,3 +7,24 @@ export {
   buildIntentSignal,
   type ParsedIntent,
 } from './intent-parser.js';
+export {
+  bootstrapLiftCI,
+  mannWhitneyU,
+  scoreExperiment,
+  P_WINNER,
+  P_TREND,
+  LIFT_WIN,
+  BOOTSTRAP_ITERATIONS,
+  type BootstrapResult,
+  type MannWhitneyResult,
+  type ScoringResult,
+  type ExperimentVerdict,
+} from './experiment-stats.js';
+export {
+  CircuitBreaker,
+  CircuitOpenError,
+  getCircuitBreaker,
+  getAllCircuitBreakerStats,
+  type CircuitState,
+  type CircuitBreakerOptions,
+} from './circuit-breaker.js';

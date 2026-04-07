@@ -13,7 +13,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { getConfig } from '../config.js';
-import { safeCompare } from '../lib/auth.js';
+import { safeCompare, verifyWebhookSignature } from '../lib/auth.js';
 import { getRedis } from '../lib/redis.js';
 import { getIntentQueue, getAudienceSyncQueue, getScraperEventQueue } from '../jobs/queue.js';
 import { db } from '@osool/db';
@@ -115,6 +115,25 @@ function checkWebhookSecret(
   return safeCompare(secret, configuredSecret);
 }
 
+/**
+ * Verify webhook request authenticity.
+ * Supports both HMAC body signature (preferred) and shared secret header (legacy).
+ */
+function verifyWebhookRequest(
+  req: { headers: Record<string, string | string[] | undefined>; body: unknown },
+): boolean {
+  const cfg = getConfig();
+  const secretHeader = req.headers['x-webhook-secret'] as string | undefined;
+  const signatureHeader = req.headers['x-webhook-signature'] as string | undefined;
+
+  return verifyWebhookSignature(
+    JSON.stringify(req.body),
+    signatureHeader,
+    secretHeader,
+    cfg.WEBHOOK_SECRET,
+  );
+}
+
 // ── Plugin ────────────────────────────────────────────────────────────────────
 
 export const webhookRoutes: FastifyPluginAsync = async (app) => {
@@ -126,8 +145,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/chat-message',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      const cfg = getConfig();
-      if (!checkWebhookSecret(req.headers['x-webhook-secret'] as string, cfg.WEBHOOK_SECRET)) {
+      if (!verifyWebhookRequest(req)) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -182,8 +200,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/chat-session-end',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      const cfg = getConfig();
-      if (!checkWebhookSecret(req.headers['x-webhook-secret'] as string, cfg.WEBHOOK_SECRET)) {
+      if (!verifyWebhookRequest(req)) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -221,8 +238,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/page-view',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      const cfg = getConfig();
-      if (!checkWebhookSecret(req.headers['x-webhook-secret'] as string, cfg.WEBHOOK_SECRET)) {
+      if (!verifyWebhookRequest(req)) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -258,8 +274,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/signup',
     { config: { rateLimit: { max: 200, timeWindow: '1 minute' } } },
     async (req, reply) => {
-      const cfg = getConfig();
-      if (!checkWebhookSecret(req.headers['x-webhook-secret'] as string, cfg.WEBHOOK_SECRET)) {
+      if (!verifyWebhookRequest(req)) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -334,8 +349,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/ad-click',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      const cfg = getConfig();
-      if (!checkWebhookSecret(req.headers['x-webhook-secret'] as string, cfg.WEBHOOK_SECRET)) {
+      if (!verifyWebhookRequest(req)) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -368,8 +382,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/user-memory',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      const cfg = getConfig();
-      if (!checkWebhookSecret(req.headers['x-webhook-secret'] as string, cfg.WEBHOOK_SECRET)) {
+      if (!verifyWebhookRequest(req)) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -419,8 +432,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: z.infer<typeof scraperEventSchema> }>(
     '/webhooks/scraper-event',
     async (req, reply) => {
-      const cfg = getConfig();
-      if (!checkWebhookSecret(req.headers['x-webhook-secret'] as string, cfg.WEBHOOK_SECRET)) {
+      if (!verifyWebhookRequest(req)) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 

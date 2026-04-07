@@ -47,7 +47,7 @@ export async function processIntent(data: IntentJobData): Promise<{ stored: bool
   // If high-confidence intent from a lead-generating type, evaluate email trigger
   if (result.confidence >= 0.6 && ['comparison', 'roi_inquiry', 'payment_plan'].includes(result.intentType)) {
     const triggerQ = getEmailTriggerQueue();
-    await triggerQ.add('check-trigger', {
+    await triggerQ.add('check-email-triggers', {
       sessionId: data.sessionId,
       userId: data.userId,
       anonymousId: data.anonymousId,

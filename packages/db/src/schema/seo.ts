@@ -59,8 +59,20 @@ export const seoContent = pgTable('seo_content', {
   schemaMarkup: jsonb('schema_markup').$type<Record<string, unknown>>(),
   generationPromptKey: varchar('generation_prompt_key', { length: 255 }), // For audit/debugging
   wordCount: integer('word_count').default(0),
-  status: varchar('status', { length: 50 }).default('draft').notNull(), // 'draft' | 'published' | 'archived'
+  status: varchar('status', { length: 50 }).default('draft').notNull(), // 'draft' | 'published' | 'archived' | 'needs_review'
   publishedAt: timestamp('published_at', { withTimezone: true }),
+
+  /** Quality gate scoring — populated by expert panel service */
+  qualityScore: integer('quality_score'), // 0-100, null = not scored yet
+  qualityRounds: jsonb('quality_rounds').$type<{
+    round: number;
+    scores: { expert: string; score: number; feedback: string }[];
+    avgScore: number;
+    weaknesses: string[];
+    revisedAt: string;
+  }[]>(),
+  qualityStatus: varchar('quality_status', { length: 50 }), // 'pending' | 'scoring' | 'passed' | 'failed' | 'needs_review'
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [

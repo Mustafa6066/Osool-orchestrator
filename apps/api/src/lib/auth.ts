@@ -82,6 +82,36 @@ export function safeCompare(a: string, b: string): boolean {
   return timingSafeEqual(hmacA, hmacB);
 }
 
+/**
+ * Verify HMAC-SHA256 signature of a webhook payload.
+ * The frontend signs: HMAC-SHA256(webhookSecret, JSON.stringify(body))
+ * and sends the hex digest in x-webhook-signature header.
+ *
+ * Falls back to shared-secret header check if no signature header is present
+ * (backward compatibility with existing Platform integration).
+ */
+export function verifyWebhookSignature(
+  body: string,
+  signatureHeader: string | undefined,
+  secretHeader: string | undefined,
+  configuredSecret: string | undefined,
+): boolean {
+  // In dev, if no secret configured, allow all
+  if (!configuredSecret || configuredSecret.trim() === '') return true;
+
+  // Preferred: HMAC body signature verification
+  if (signatureHeader) {
+    const expectedSig = createHmac('sha256', configuredSecret)
+      .update(body)
+      .digest('hex');
+    return safeCompare(signatureHeader, expectedSig);
+  }
+
+  // Fallback: shared secret header (backward compat)
+  if (!secretHeader) return false;
+  return safeCompare(secretHeader, configuredSecret);
+}
+
 // ── Osool Platform JWT (SSO-lite) ────────────────────────────────────────────
 
 export interface PlatformTokenPayload {

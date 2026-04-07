@@ -18,6 +18,12 @@ import {
   type MarketPulseJobData,
   type NotificationPushJobData,
   type ScraperEventJobData,
+  type ExperimentScoringJobData,
+  type ContentQualityGateJobData,
+  type SEOIntelligenceJobData,
+  type CROAuditJobData,
+  type ContentOptimizationJobData,
+  type ScraperRefreshJobData,
   getEmailSendQueue,
 } from './queue.js';
 
@@ -70,6 +76,36 @@ async function processNotificationPushJob(job: Job<NotificationPushJobData>) {
 async function processScraperEventJob(job: Job<ScraperEventJobData>) {
   const { processScraperEvent } = await import('./handlers/scraper-event.job.js');
   return processScraperEvent(job.data);
+}
+
+async function processExperimentScoringJob(job: Job<ExperimentScoringJobData>) {
+  const { scoreExperimentJob } = await import('./handlers/score-experiment.job.js');
+  return scoreExperimentJob(job.data);
+}
+
+async function processContentQualityGateJob(job: Job<ContentQualityGateJobData>) {
+  const { runQualityGate } = await import('./handlers/quality-gate.job.js');
+  return runQualityGate(job.data);
+}
+
+async function processSEOIntelligenceJob(job: Job<SEOIntelligenceJobData>) {
+  const { runSEOIntelligence } = await import('./handlers/seo-intelligence.job.js');
+  return runSEOIntelligence(job.data);
+}
+
+async function processCROAuditJob(job: Job<CROAuditJobData>) {
+  const { runCROAudit } = await import('./handlers/cro-audit.job.js');
+  return runCROAudit(job.data);
+}
+
+async function processContentOptimizationJob(job: Job<ContentOptimizationJobData>) {
+  const { optimizeContent } = await import('./handlers/optimize-content.job.js');
+  return optimizeContent(job.data);
+}
+
+async function processScraperRefreshJob(job: Job<ScraperRefreshJobData>) {
+  const { processScraperRefresh } = await import('./handlers/scraper-refresh.job.js');
+  return processScraperRefresh(job.data);
 }
 
 // ── Worker registry ───────────────────────────────────────────────────────────
@@ -150,6 +186,64 @@ export async function startWorkers(): Promise<void> {
     },
   );
 
+  const experimentScoringWorker = new Worker<ExperimentScoringJobData>(
+    'experiment-scoring',
+    processExperimentScoringJob,
+    {
+      connection: conn,
+      concurrency: 3,
+    },
+  );
+
+  const qualityGateWorker = new Worker<ContentQualityGateJobData>(
+    'content-quality-gate',
+    processContentQualityGateJob,
+    {
+      connection: conn,
+      concurrency: 2,
+      limiter: { max: 5, duration: 60_000 },
+    },
+  );
+
+  const seoIntelligenceWorker = new Worker<SEOIntelligenceJobData>(
+    'seo-intelligence',
+    processSEOIntelligenceJob,
+    {
+      connection: conn,
+      concurrency: 1,
+    },
+  );
+
+  const croAuditWorker = new Worker<CROAuditJobData>(
+    'cro-audit',
+    processCROAuditJob,
+    {
+      connection: conn,
+      concurrency: 2,
+      limiter: { max: 10, duration: 60_000 },
+    },
+  );
+
+  const contentOptimizationWorker = new Worker<ContentOptimizationJobData>(
+    'content-optimization',
+    processContentOptimizationJob,
+    {
+      connection: conn,
+      concurrency: 1,
+      limiter: { max: 3, duration: 60_000 },
+    },
+  );
+
+  const scraperRefreshWorker = new Worker<ScraperRefreshJobData>(
+    'scraper-refresh',
+    processScraperRefreshJob,
+    {
+      connection: conn,
+      concurrency: 1,
+      limiter: { max: 2, duration: 60_000 },
+    },
+  );
+
   for (const worker of [
     intentWorker,
     scoringWorker,
@@ -161,6 +255,12 @@ export async function startWorkers(): Promise<void> {
     marketPulseWorker,
     notificationPushWorker,
     scraperEventWorker,
+    experimentScoringWorker,
+    qualityGateWorker,
+    seoIntelligenceWorker,
+    croAuditWorker,
+    contentOptimizationWorker,
+    scraperRefreshWorker,
   ]) {
     worker.on('completed', (job) => {
       console.info(`[${worker.name}] Job ${job.id} completed`);
@@ -189,11 +289,19 @@ export async function stopWorkers(): Promise<void> {
 // ── Scheduled agent jobs ──────────────────────────────────────────────────────
 
 async function scheduleAgentJobs(): Promise<void> {
-  const { getMarketPulseQueue, getFeedbackLoopQueue, getNotificationPushQueue } = await import('./queue.js');
+  const {
+    getMarketPulseQueue,
+    getFeedbackLoopQueue,
+    getNotificationPushQueue,
+    getExperimentScoringQueue,
+    getSEOIntelligenceQueue,
+  } = await import('./queue.js');
 
   const marketPulseQ = getMarketPulseQueue();
   const feedbackLoopQ = getFeedbackLoopQueue();
   const notificationPushQ = getNotificationPushQueue();
+  const experimentScoringQ = getExperimentScoringQueue();
+  const seoIntelligenceQ = getSEOIntelligenceQueue();
 
   // Nexus agent: run market pulse every hour
   await marketPulseQ.add(
@@ -216,6 +324,7 @@ async function scheduleAgentJobs(): Promise<void> {
     'email_sequence_optimize',
     'lead_scoring_recalibrate',
     'content_gap_analysis',
+    'icp_learning_update',
   ];
 
   for (const loopType of loopTypes) {
@@ -225,6 +334,20 @@ async function scheduleAgentJobs(): Promise<void> {
       { repeat: { pattern: '0 */6 * * *' } },
     );
   }
+
+  // Experiment scoring: every 4 hours
+  await experimentScoringQ.add(
+    'experiment-scoring-scheduled',
+    { triggeredBy: 'scheduled' },
+    { repeat: { pattern: '0 */4 * * *' } },
+  );
+
+  // SEO intelligence: weekly on Monday at 3 AM
+  await seoIntelligenceQ.add(
+    'seo-intelligence-weekly',
+    { scope: 'full', triggeredBy: 'scheduled' },
+    { repeat: { pattern: '0 3 * * 1' } },
+  );
 
   console.info('[Workers] Scheduled agent jobs registered');
 }

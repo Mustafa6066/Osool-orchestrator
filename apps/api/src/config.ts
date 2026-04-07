@@ -19,6 +19,7 @@ const schema = z.object({
 
   // AI
   ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-20250514'),
 
   // Email
   RESEND_API_KEY: z.string().optional(),
@@ -48,7 +49,7 @@ const schema = z.object({
   API_KEY: z.string().min(16, 'API_KEY must be at least 16 characters').optional(),
 
   // CORS origins (comma-separated)
-  ALLOWED_ORIGINS: z.string().default('https://osool-ten.vercel.app,https://osooladmin-production.up.railway.app,http://localhost:3000,http://localhost:5173,http://localhost:3001'),
+  ALLOWED_ORIGINS: z.string().default('https://osool-ten.vercel.app,https://osool-production.up.railway.app,https://osooladmin-production.up.railway.app,http://localhost:3000,http://localhost:5173,http://localhost:3001'),
 
   // Meta Ads (optional)
   META_APP_ID: z.string().optional(),
@@ -70,6 +71,15 @@ const schema = z.object({
   // WhatsApp (optional)
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+
+  // SEO Intelligence — external API keys (optional)
+  AHREFS_TOKEN: z.string().optional(),
+  BRAVE_API_KEY: z.string().optional(),
+
+  // Google Search Console (optional)
+  GSC_SITE_URL: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
 
   // Timezone
   CAIRO_TIMEZONE: z.string().default('Africa/Cairo'),

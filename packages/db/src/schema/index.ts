@@ -26,3 +26,9 @@ export {
   feedbackLoopEvents,
   intentSignals,
 } from './funnel.js';
+export { experiments } from './experiments.js';
+export { croAudits } from './cro-audits.js';
+export {
+  reasoningChains,
+  llmCostLog,
+} from './intelligence.js';

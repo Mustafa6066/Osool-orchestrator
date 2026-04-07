@@ -90,6 +90,22 @@ export const dataRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(404).send({ error: 'One or both developers not found' });
       }
 
+      // Derive payment flexibility from actual properties data
+      // Score: max installment years * 5 + (100 - min down payment %) — capped at 100
+      const [propsA, propsB] = await Promise.all([
+        db.select({
+          maxInstallment: sql<number>`coalesce(max(${properties.installmentYears}), 0)`,
+          minDown: sql<number>`coalesce(min(${properties.downPaymentPercent}), 15)`,
+        }).from(properties).where(eq(properties.developerId, String(devAData.id))),
+        db.select({
+          maxInstallment: sql<number>`coalesce(max(${properties.installmentYears}), 0)`,
+          minDown: sql<number>`coalesce(min(${properties.downPaymentPercent}), 15)`,
+        }).from(properties).where(eq(properties.developerId, String(devBData.id))),
+      ]);
+      const flexScore = (inst: number, down: number) => Math.min(100, Math.round(inst * 5 + (100 - down)));
+      const flexA = propsA[0] ? flexScore(Number(propsA[0].maxInstallment), Number(propsA[0].minDown)) : 70;
+      const flexB = propsB[0] ? flexScore(Number(propsB[0].maxInstallment), Number(propsB[0].minDown)) : 70;
+
       // Safely access properties that may differ between DB and const types
       const getNum = (dev: Record<string, unknown>, key: string): number =>
         typeof dev[key] === 'number' ? (dev[key] as number) : 0;
@@ -129,7 +145,7 @@ export const dataRoutes: FastifyPluginAsync = async (app) => {
             b: getNum(devBData as Record<string, unknown>, 'avgPricePerSqm') || getNum(devBData as Record<string, unknown>, 'avg_price_per_sqm'),
             currency: 'EGP',
           },
-          paymentFlexibility: { a: 75, b: 70 }, // TODO: derive from properties data
+          paymentFlexibility: { a: flexA, b: flexB },
           resaleRetention: { a: 82, b: 78 },
           communityScore: { a: 88, b: 85 },
         },

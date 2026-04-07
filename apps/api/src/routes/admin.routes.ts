@@ -42,6 +42,8 @@ import {
   seoContent,
   retargetingAudiences,
   keywords,
+  experiments,
+  croAudits,
 } from '@osool/db/schema';
 import {
   eq,
@@ -159,8 +161,29 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       const payload = verifyRefreshToken(refreshToken);
       if (!payload) return reply.status(401).send({ error: 'Invalid refresh token' });
 
+      // Check if refresh token has been revoked (e.g. after logout)
+      if (isRedisConfigured()) {
+        const redis = getRedis();
+        if (redis) {
+          const revoked = await redis.get(`admin:revoked:${refreshToken.slice(-16)}`);
+          if (revoked) return reply.status(401).send({ error: 'Token has been revoked' });
+        }
+      }
+
+      // Refresh token rotation: issue new refresh token, revoke old one
+      const newRefreshToken = signRefreshToken(payload.sub);
+
+      // Revoke old refresh token (store last 16 chars as key, TTL = 7 days)
+      if (isRedisConfigured()) {
+        const redis = getRedis();
+        if (redis) {
+          await redis.set(`admin:revoked:${refreshToken.slice(-16)}`, '1', 'EX', 7 * 24 * 3600);
+        }
+      }
+
       return reply.send({
         accessToken: signAccessToken(payload.sub),
+        refreshToken: newRefreshToken,
         expiresIn: 1800,
       });
     },
@@ -721,6 +744,237 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     return reply.send({ sequences: stats });
   });
+
+  // ── Experiments ───────────────────────────────────────────────────────────
+
+  // List experiments with optional status filter
+  app.get<{ Querystring: { status?: string; agent?: string } }>(
+    '/experiments',
+    async (req, reply) => {
+      if (!(await requireAdmin(req as never, reply as never))) return;
+
+      const conditions = [];
+      if (req.query.status) conditions.push(eq(experiments.status, req.query.status));
+      if (req.query.agent) conditions.push(eq(experiments.agent, req.query.agent));
+
+      const rows = await db
+        .select()
+        .from(experiments)
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(experiments.createdAt));
+
+      return reply.send({ experiments: rows });
+    },
+  );
+
+  // Create a new experiment
+  app.post<{
+    Body: {
+      agent: string;
+      hypothesis: string;
+      variable: string;
+      variants: { name: string; config: Record<string, unknown> }[];
+      primaryMetric: string;
+      cycleHours?: number;
+      minSamples?: number;
+      baselineVariant?: string;
+    };
+  }>('/experiments', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const { agent, hypothesis, variable, variants, primaryMetric, cycleHours, minSamples, baselineVariant } = req.body;
+
+    if (!agent || !hypothesis || !variable || !variants?.length || !primaryMetric) {
+      return reply.status(400).send({ error: 'Missing required fields: agent, hypothesis, variable, variants, primaryMetric' });
+    }
+
+    const [created] = await db.insert(experiments).values({
+      agent,
+      hypothesis,
+      variable,
+      variants,
+      primaryMetric,
+      cycleHours: cycleHours ?? 24,
+      minSamples: minSamples ?? 30,
+      baselineVariant: baselineVariant ?? variants[0].name,
+      status: 'running',
+    }).returning();
+
+    return reply.status(201).send({ experiment: created });
+  });
+
+  // Log a data point for an experiment
+  app.post<{
+    Params: { id: string };
+    Body: { variant: string; metric: string; value: number };
+  }>('/experiments/:id/log', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const { id } = req.params;
+    const { variant, metric, value } = req.body;
+
+    if (!variant || !metric || value === undefined) {
+      return reply.status(400).send({ error: 'Missing required fields: variant, metric, value' });
+    }
+
+    const [exp] = await db.select().from(experiments).where(eq(experiments.id, id));
+    if (!exp) return reply.status(404).send({ error: 'Experiment not found' });
+
+    const dataPoints = (exp.dataPoints ?? []) as { variant: string; metric: string; value: number; ts: string }[];
+    dataPoints.push({ variant, metric, value, ts: new Date().toISOString() });
+
+    await db.update(experiments).set({ dataPoints, updatedAt: new Date() }).where(eq(experiments.id, id));
+
+    return reply.send({ logged: true, totalPoints: dataPoints.length });
+  });
+
+  // Trigger manual scoring
+  app.post<{ Params: { id: string } }>('/experiments/:id/score', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const { getExperimentScoringQueue } = await import('../jobs/queue.js');
+    const queue = getExperimentScoringQueue();
+    await queue.add('manual-score', { experimentId: req.params.id, triggeredBy: 'admin' });
+
+    return reply.send({ status: 'scoring_enqueued' });
+  });
+
+  // Get playbook for an agent
+  app.get<{ Params: { agent: string } }>('/experiments/playbook/:agent', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const rows = await db
+      .select()
+      .from(experiments)
+      .where(and(eq(experiments.agent, req.params.agent), eq(experiments.status, 'keep')))
+      .orderBy(desc(experiments.updatedAt));
+
+    const playbook = rows
+      .filter((r) => r.playbook)
+      .map((r) => ({ id: r.id, variable: r.variable, ...r.playbook as Record<string, unknown> }));
+
+    return reply.send({ playbook });
+  });
+
+  // ── CRO Audits ────────────────────────────────────────────────────────────
+
+  // Trigger a CRO audit
+  app.post<{ Body: { url: string; pageType: string } }>('/cro/audit', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const { url, pageType } = req.body;
+    if (!url || !pageType) {
+      return reply.status(400).send({ error: 'Missing required fields: url, pageType' });
+    }
+
+    const { getCROAuditQueue } = await import('../jobs/queue.js');
+    const queue = getCROAuditQueue();
+    await queue.add('cro-audit', { url, pageType });
+
+    return reply.send({ status: 'audit_enqueued', url });
+  });
+
+  // List past audits
+  app.get('/cro/audits', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const rows = await db
+      .select()
+      .from(croAudits)
+      .orderBy(desc(croAudits.createdAt))
+      .limit(50);
+
+    return reply.send({ audits: rows });
+  });
+
+  // Get detailed audit
+  app.get<{ Params: { id: string } }>('/cro/audits/:id', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const [audit] = await db.select().from(croAudits).where(eq(croAudits.id, req.params.id));
+    if (!audit) return reply.status(404).send({ error: 'Audit not found' });
+
+    return reply.send({ audit });
+  });
+
+  // ── SEO Intelligence ──────────────────────────────────────────────────────
+
+  app.get('/seo-intelligence', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const redis = getRedis();
+    const cached = await redis.get('seo:intelligence:latest');
+
+    if (cached) {
+      return reply.send(JSON.parse(cached));
+    }
+
+    return reply.send({ message: 'No intelligence report available yet. Run the weekly SEO intelligence job.' });
+  });
+
+  // Trigger SEO intelligence run
+  app.post('/seo-intelligence/run', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const { getSEOIntelligenceQueue } = await import('../jobs/queue.js');
+    const queue = getSEOIntelligenceQueue();
+    await queue.add('seo-intelligence-manual', { scope: 'full', triggeredBy: 'admin' });
+
+    return reply.send({ status: 'intelligence_run_enqueued' });
+  });
+
+  // ── ICP Learning ──────────────────────────────────────────────────────────
+
+  app.get('/icp-learning', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const { generateICPReport } = await import('../services/icp-learning.service.js');
+    const report = await generateICPReport();
+
+    return reply.send(report);
+  });
+
+  // ── Content Optimization ──────────────────────────────────────────────────
+
+  // Trigger optimization for a content piece
+  app.post<{ Params: { contentId: string }; Body: { elements?: string[] } }>(
+    '/optimization/:contentId',
+    async (req, reply) => {
+      if (!(await requireAdmin(req as never, reply as never))) return;
+
+      const { getContentOptimizationQueue } = await import('../jobs/queue.js');
+      const queue = getContentOptimizationQueue();
+      await queue.add('optimize', {
+        seoContentId: req.params.contentId,
+        elements: req.body?.elements,
+      });
+
+      return reply.send({ status: 'optimization_enqueued', contentId: req.params.contentId });
+    },
+  );
+
+  // ── Quality Gate ──────────────────────────────────────────────────────────
+
+  // Trigger quality gate for content
+  app.post<{ Params: { contentId: string } }>(
+    '/quality-gate/:contentId',
+    async (req, reply) => {
+      if (!(await requireAdmin(req as never, reply as never))) return;
+
+      const [content] = await db.select().from(seoContent).where(eq(seoContent.id, req.params.contentId));
+      if (!content) return reply.status(404).send({ error: 'Content not found' });
+
+      const { getContentQualityGateQueue } = await import('../jobs/queue.js');
+      const queue = getContentQualityGateQueue();
+      await queue.add('quality-gate', {
+        seoContentId: content.id,
+        contentType: content.pageType,
+        locale: content.locale,
+      });
+
+      return reply.send({ status: 'quality_gate_enqueued', contentId: content.id });
+    },
+  );
 };
 
 // Add bcryptjs to API dependencies

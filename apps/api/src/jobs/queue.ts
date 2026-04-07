@@ -41,6 +41,12 @@ let feedbackLoopQueue: Queue | null = null;
 let marketPulseQueue: Queue | null = null;
 let notificationPushQueue: Queue | null = null;
 let scraperEventQueue: Queue | null = null;
+let experimentScoringQueue: Queue | null = null;
+let contentQualityGateQueue: Queue | null = null;
+let seoIntelligenceQueue: Queue | null = null;
+let croAuditQueue: Queue | null = null;
+let contentOptimizationQueue: Queue | null = null;
+let scraperRefreshQueue: Queue | null = null;
 
 // ── Factory functions ─────────────────────────────────────────────────────────
 
@@ -144,6 +150,66 @@ export function getScraperEventQueue(): Queue<ScraperEventJobData> {
   return scraperEventQueue as Queue<ScraperEventJobData>;
 }
 
+export function getExperimentScoringQueue(): Queue<ExperimentScoringJobData> {
+  if (!experimentScoringQueue) {
+    experimentScoringQueue = new Queue<ExperimentScoringJobData>('experiment-scoring', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return experimentScoringQueue as Queue<ExperimentScoringJobData>;
+}
+
+export function getContentQualityGateQueue(): Queue<ContentQualityGateJobData> {
+  if (!contentQualityGateQueue) {
+    contentQualityGateQueue = new Queue<ContentQualityGateJobData>('content-quality-gate', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return contentQualityGateQueue as Queue<ContentQualityGateJobData>;
+}
+
+export function getSEOIntelligenceQueue(): Queue<SEOIntelligenceJobData> {
+  if (!seoIntelligenceQueue) {
+    seoIntelligenceQueue = new Queue<SEOIntelligenceJobData>('seo-intelligence', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return seoIntelligenceQueue as Queue<SEOIntelligenceJobData>;
+}
+
+export function getCROAuditQueue(): Queue<CROAuditJobData> {
+  if (!croAuditQueue) {
+    croAuditQueue = new Queue<CROAuditJobData>('cro-audit', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return croAuditQueue as Queue<CROAuditJobData>;
+}
+
+export function getContentOptimizationQueue(): Queue<ContentOptimizationJobData> {
+  if (!contentOptimizationQueue) {
+    contentOptimizationQueue = new Queue<ContentOptimizationJobData>('content-optimization', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return contentOptimizationQueue as Queue<ContentOptimizationJobData>;
+}
+
+export function getScraperRefreshQueue(): Queue<ScraperRefreshJobData> {
+  if (!scraperRefreshQueue) {
+    scraperRefreshQueue = new Queue<ScraperRefreshJobData>('scraper-refresh', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return scraperRefreshQueue as Queue<ScraperRefreshJobData>;
+}
+
 // ── Close all queues ──────────────────────────────────────────────────────────
 
 export async function closeAllQueues(): Promise<void> {
@@ -159,6 +225,12 @@ export async function closeAllQueues(): Promise<void> {
       marketPulseQueue,
       notificationPushQueue,
       scraperEventQueue,
+      experimentScoringQueue,
+      contentQualityGateQueue,
+      seoIntelligenceQueue,
+      croAuditQueue,
+      contentOptimizationQueue,
+      scraperRefreshQueue,
     ]
       .filter(Boolean)
       .map((q) => q!.close()),
@@ -239,7 +311,8 @@ export interface FeedbackLoopJobData {
     | 'audience_performance_sync'
     | 'email_sequence_optimize'
     | 'lead_scoring_recalibrate'
-    | 'content_gap_analysis';
+    | 'content_gap_analysis'
+    | 'icp_learning_update';
   entityId?: string;
 }
 
@@ -260,4 +333,41 @@ export interface ScraperEventJobData {
   indicators?: Record<string, number>;
   sentimentShift?: number;
   triggeredBy?: string;
+}
+
+export interface ExperimentScoringJobData {
+  experimentId?: string; // specific experiment, or all running if omitted
+  triggeredBy?: string;
+}
+
+export interface ContentQualityGateJobData {
+  seoContentId: string;
+  contentType: string;
+  locale?: string;
+  maxRounds?: number; // default 3
+}
+
+export interface SEOIntelligenceJobData {
+  scope?: 'full' | 'decay_only' | 'gaps_only';
+  triggeredBy?: string;
+}
+
+export interface CROAuditJobData {
+  url: string;
+  pageType: string;
+}
+
+export interface ContentOptimizationJobData {
+  seoContentId: string;
+  elements?: string[]; // which elements to optimize: 'headline' | 'meta' | 'h1' | 'intro' | 'cta'
+  maxRounds?: number; // default 3
+}
+
+export interface ScraperRefreshJobData {
+  source: 'nawy' | 'aqarmap' | 'bayut';
+  mode: 'full' | 'targeted' | 'nawy_now';
+  targetArea?: string;
+  targetCompoundSlug?: string;
+  triggeredBy?: string;
+  priority?: 'normal' | 'high';
 }

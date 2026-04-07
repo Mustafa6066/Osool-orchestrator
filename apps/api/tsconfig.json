@@ -4,6 +4,5 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/lib/trpc.ts", "src/lib/trpc-fastify.ts", "src/lib/context.ts", "src/routes/index.ts", "src/routes/chat.ts", "src/routes/funnel.ts", "src/routes/properties.ts", "src/routes/seo.ts"]
+  "include": ["src/**/*.ts"]
 }

@@ -75,6 +75,32 @@ services:
     environment:
       VITE_API_URL: http://localhost:4000
 
+  # Nightly PostgreSQL backup — dumps to ./backups/ on the host
+  pg-backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: osool
+      PGPASSWORD: osool_dev_2025
+      PGDATABASE: osool
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          STAMP=$$(date +%Y%m%d_%H%M%S)
+          pg_dump -Fc > /backups/osool_$$STAMP.dump
+          # Keep only the 7 most recent backups
+          ls -t /backups/osool_*.dump | tail -n +8 | xargs -r rm --
+          echo "[pg-backup] $$STAMP done — $$(ls /backups/osool_*.dump | wc -l) backups retained"
+          sleep 86400
+        done
+
 volumes:
   pgdata:
   redisdata:

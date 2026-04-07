@@ -54,7 +54,7 @@ async function callClaude(
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const response = await getClient().messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: getConfig().ANTHROPIC_MODEL,
         max_tokens: maxTokens,
         system,
         messages,

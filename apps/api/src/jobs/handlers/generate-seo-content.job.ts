@@ -9,7 +9,7 @@ import { db } from '@osool/db';
 import { seoContent } from '@osool/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { generateSEOPage } from '../../agents/seo-agent.js';
-import type { SEOContentGenJobData } from '../queue.js';
+import { getContentQualityGateQueue, type SEOContentGenJobData } from '../queue.js';
 
 export async function generateSEOContent(data: SEOContentGenJobData): Promise<{ generated: boolean; slug: string }> {
   const { pageType, locale, entityId, entityIds, forceRegenerate } = data;
@@ -34,9 +34,16 @@ export async function generateSEOContent(data: SEOContentGenJobData): Promise<{ 
     }
   }
 
+  const validPageTypes = ['developer_profile', 'location_guide', 'developer_comparison', 'roi_analysis', 'buying_guide'] as const;
+  type ValidPageType = typeof validPageTypes[number];
+
+  if (!validPageTypes.includes(pageType as ValidPageType)) {
+    throw new Error(`Invalid pageType: ${pageType}. Must be one of: ${validPageTypes.join(', ')}`);
+  }
+
   // Generate via Claude
   const generated = await generateSEOPage({
-    pageType: pageType as 'developer_profile' | 'location_guide' | 'developer_comparison' | 'roi_analysis' | 'buying_guide',
+    pageType: pageType as ValidPageType,
     entityId,
     entityIds,
     locale,
@@ -48,7 +55,10 @@ export async function generateSEOContent(data: SEOContentGenJobData): Promise<{ 
     .from(seoContent)
     .where(and(eq(seoContent.pageType, pageType), eq(seoContent.slug, slug), eq(seoContent.locale, locale)));
 
+  let contentId: string;
+
   if (existing.length > 0) {
+    contentId = existing[0].id;
     await db
       .update(seoContent)
       .set({
@@ -58,13 +68,14 @@ export async function generateSEOContent(data: SEOContentGenJobData): Promise<{ 
         h1: generated.h1,
         body: generated.content,
         schemaMarkup: generated.schemaMarkup,
-        status: 'published',
+        status: 'draft',
+        qualityStatus: 'pending',
         version: 1,
         updatedAt: new Date(),
       })
       .where(and(eq(seoContent.pageType, pageType), eq(seoContent.slug, slug), eq(seoContent.locale, locale)));
   } else {
-    await db.insert(seoContent).values({
+    const [inserted] = await db.insert(seoContent).values({
       pageType,
       slug,
       locale,
@@ -74,10 +85,20 @@ export async function generateSEOContent(data: SEOContentGenJobData): Promise<{ 
       h1: generated.h1,
       body: generated.content,
       schemaMarkup: generated.schemaMarkup,
-      status: 'published',
+      status: 'draft',
+      qualityStatus: 'pending',
       version: 1,
-    });
+    }).returning({ id: seoContent.id });
+    contentId = inserted.id;
   }
+
+  // Chain to quality gate — expert panel scores before publishing
+  const qualityQ = getContentQualityGateQueue();
+  await qualityQ.add(`quality-${contentId}`, {
+    seoContentId: contentId,
+    contentType: pageType,
+    locale,
+  });
 
   return { generated: true, slug };
 }

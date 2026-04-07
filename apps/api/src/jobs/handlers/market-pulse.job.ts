@@ -91,6 +91,16 @@ export async function runMarketPulse(_data: MarketPulseJobData): Promise<{ aggre
     computedAt: new Date().toISOString(),
   };
 
+  // Enrich with external trend signals (non-blocking)
+  try {
+    const { runTrendScout } = await import('../../services/trend-scout.service.js');
+    const scout = await runTrendScout();
+    (trending as Record<string, unknown>).externalTrends = scout.trends.slice(0, 10);
+    (trending as Record<string, unknown>).contentAngles = scout.contentAngles.slice(0, 5);
+  } catch {
+    // Trend scout is optional — continue with internal data only
+  }
+
   // Store in Redis with 2h TTL
   await redis.set('nexus:trending', JSON.stringify(trending), 'EX', 7200);
   await redis.set('agent:nexus:last_run', new Date().toISOString(), 'EX', 7200);

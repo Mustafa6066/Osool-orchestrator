@@ -12,6 +12,8 @@
 import { nexusAgent } from './agents/nexus.agent.js';
 import { marketingAgent } from './agents/marketing.agent.js';
 import { integrationAgent } from './agents/integration.agent.js';
+import { experimentAgent } from './agents/experiment.agent.js';
+import { registerAgentReactions } from './events/agent-events.js';
 import type { FastifyBaseLogger } from 'fastify';
 
 const MINUTE = 60 * 1000;
@@ -30,6 +32,9 @@ async function runAgent(name: string, fn: () => Promise<void>, log: FastifyBaseL
 }
 
 export function startScheduler(log: FastifyBaseLogger): void {
+  // ── Register event-driven agent reactions ──────────────────────────────────
+  registerAgentReactions(log);
+
   // ── Nexus — every 60 minutes ──────────────────────────────────────────────
   const runNexus = () => runAgent('nexus', () => nexusAgent.execute(), log);
   void runNexus(); // fire immediately
@@ -51,10 +56,23 @@ export function startScheduler(log: FastifyBaseLogger): void {
     timers.push(setInterval(() => void runMarketing(), 6 * HOUR));
   }, 5 * MINUTE));
 
-  log.info('[scheduler] ✅ Agent scheduler started (nexus:60m, integration:30m, marketing:6h)');
+  // ── Experiment — every 4 hours ──────────────────────────────────────────────
+  const runExperiment = () => runAgent('experiment', () => experimentAgent.execute(), log);
+  // Delay 7 min on startup
+  timers.push(setTimeout(() => {
+    void runExperiment();
+    timers.push(setInterval(() => void runExperiment(), 4 * HOUR));
+  }, 7 * MINUTE));
+
+  log.info('[scheduler] ✅ Hybrid scheduler started (intervals + event reactions)');
 }
 
 export function stopScheduler(): void {
+  // Stop event bus
+  import('./events/agent-events.js').then(({ getAgentEventBus }) => {
+    getAgentEventBus().removeAll();
+  }).catch(() => {});
+
   for (const t of timers) clearTimeout(t);
   timers.length = 0;
 }

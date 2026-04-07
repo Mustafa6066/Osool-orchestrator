@@ -1,9 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { env } from '../lib/env.js';
+import { getConfig } from '../config.js';
 import { DEVELOPERS, LOCATIONS } from '@osool/shared';
 import { slugifyEn, comparisonSlug } from '@osool/shared';
 
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: getConfig().ANTHROPIC_API_KEY });
 
 export interface SEOPageInput {
   pageType: 'developer_profile' | 'location_guide' | 'developer_comparison' | 'roi_analysis' | 'buying_guide';
@@ -123,7 +123,7 @@ Write in Egyptian dialect, NOT Modern Standard Arabic.`
 This builds cultural rapport with readers exploring the Egyptian market.`;
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: getConfig().ANTHROPIC_MODEL,
     max_tokens: 4096,
     system: `You are an expert SEO content writer for Egyptian real estate. Write in ${locale}. Be factual, data-driven, and optimized for search engines. Include natural keyword usage.\n\n${glossaryNote}`,
     messages: [{
