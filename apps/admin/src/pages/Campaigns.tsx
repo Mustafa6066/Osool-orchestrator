@@ -71,7 +71,8 @@ export function CampaignsPage() {
       )}
 
       <div className="bg-surface-card rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[1080px] text-sm">
           <thead>
             <tr className="border-b border-border">
               <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Name</th>
@@ -145,6 +146,7 @@ export function CampaignsPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

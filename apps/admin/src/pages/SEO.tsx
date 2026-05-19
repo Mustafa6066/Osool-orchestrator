@@ -55,7 +55,8 @@ export function SEOPage() {
       )}
 
       <div className="bg-surface-card rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[880px] text-sm">
           <thead>
             <tr className="border-b border-border">
               <th className="text-left px-6 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Slug</th>
@@ -107,6 +108,7 @@ export function SEOPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {totalPages > 1 && (

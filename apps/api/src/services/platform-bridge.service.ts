@@ -12,8 +12,15 @@
 
 import { getConfig } from '../config.js';
 import { getRedis } from '../lib/redis.js';
+import { getCircuitBreaker } from '@osool/shared';
+import { fetchWithRetry } from '../lib/http-resilience.js';
 
 let platformUrl: string | null = null;
+const platformBridgeBreaker = getCircuitBreaker('platform-bridge-http', {
+  failureThreshold: 4,
+  resetTimeoutMs: 45_000,
+  successThreshold: 2,
+});
 
 function getPlatformUrl(): string {
   if (!platformUrl) {
@@ -97,10 +104,13 @@ export async function fetchLiveProperties(filters?: {
   const cacheKey = `live-props:${params.toString()}`;
   const result = await cachedFetch<PlatformProperty[]>(cacheKey, 1800, async () => {
     const url = `${getPlatformUrl()}/api/seo/projects?${params.toString()}`;
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await platformBridgeBreaker.execute(() =>
+      fetchWithRetry(
+        url,
+        { headers: { 'Content-Type': 'application/json' } },
+        { serviceName: 'platform_bridge_live_properties', maxAttempts: 3, timeoutMs: 10_000 },
+      ),
+    );
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data) ? data : (data.properties ?? []);
@@ -117,10 +127,13 @@ export async function fetchPlatformAreaROI(areaSlug: string): Promise<PlatformAr
   const cacheKey = `area-roi:${areaSlug}`;
   return cachedFetch<PlatformAreaROI>(cacheKey, 3600, async () => {
     const url = `${getPlatformUrl()}/api/seo/areas/${encodeURIComponent(areaSlug)}`;
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await platformBridgeBreaker.execute(() =>
+      fetchWithRetry(
+        url,
+        { headers: { 'Content-Type': 'application/json' } },
+        { serviceName: 'platform_bridge_area_roi', maxAttempts: 3, timeoutMs: 10_000 },
+      ),
+    );
     if (!res.ok) return null;
     return res.json();
   });
@@ -134,10 +147,13 @@ export async function fetchPlatformDeveloper(developerSlug: string): Promise<Rec
   const cacheKey = `developer:${developerSlug}`;
   return cachedFetch<Record<string, unknown>>(cacheKey, 3600, async () => {
     const url = `${getPlatformUrl()}/api/seo/developers/${encodeURIComponent(developerSlug)}`;
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await platformBridgeBreaker.execute(() =>
+      fetchWithRetry(
+        url,
+        { headers: { 'Content-Type': 'application/json' } },
+        { serviceName: 'platform_bridge_developer', maxAttempts: 3, timeoutMs: 10_000 },
+      ),
+    );
     if (!res.ok) return null;
     return res.json();
   });
@@ -152,10 +168,13 @@ export async function fetchTopROIProperties(location: string, limit = 5): Promis
   const cacheKey = `top-roi:${location}:${limit}`;
   const result = await cachedFetch<PlatformProperty[]>(cacheKey, 1800, async () => {
     const url = `${getPlatformUrl()}/api/seo/projects?location=${encodeURIComponent(location)}&sort=roi_desc&limit=${limit}`;
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await platformBridgeBreaker.execute(() =>
+      fetchWithRetry(
+        url,
+        { headers: { 'Content-Type': 'application/json' } },
+        { serviceName: 'platform_bridge_top_roi', maxAttempts: 3, timeoutMs: 10_000 },
+      ),
+    );
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data) ? data : (data.properties ?? []);
@@ -175,10 +194,13 @@ export async function fetchPlatformChatHistory(userId: string): Promise<{
   return cachedFetch(cacheKey, 300, async () => {
     // The Platform admin endpoint returns chat data
     const url = `${getPlatformUrl()}/api/admin/conversations?user_id=${encodeURIComponent(userId)}&limit=5`;
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await platformBridgeBreaker.execute(() =>
+      fetchWithRetry(
+        url,
+        { headers: { 'Content-Type': 'application/json' } },
+        { serviceName: 'platform_bridge_chat_history', maxAttempts: 3, timeoutMs: 10_000 },
+      ),
+    );
     if (!res.ok) return null;
     return res.json();
   });
@@ -192,10 +214,13 @@ export async function fetchPlatformDashboard(): Promise<Record<string, unknown> 
   const cacheKey = 'platform-dashboard';
   return cachedFetch<Record<string, unknown>>(cacheKey, 300, async () => {
     const url = `${getPlatformUrl()}/api/analytics/dashboard`;
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await platformBridgeBreaker.execute(() =>
+      fetchWithRetry(
+        url,
+        { headers: { 'Content-Type': 'application/json' } },
+        { serviceName: 'platform_bridge_dashboard', maxAttempts: 3, timeoutMs: 10_000 },
+      ),
+    );
     if (!res.ok) return null;
     return res.json();
   });

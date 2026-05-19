@@ -3,6 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
 
+function getFriendlyLoginError(error: unknown): string {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('invalid') || msg.includes('unauthorized') || msg.includes('401')) {
+      return 'Incorrect email or password. Please try again.';
+    }
+    if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) {
+      return 'Connection issue while signing in. Check your network and retry.';
+    }
+  }
+
+  return 'Could not sign in right now. Please try again in a moment.';
+}
+
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -19,7 +33,7 @@ export function LoginPage() {
       await login(email, password);
       navigate('/', { replace: true });
     } catch (err) {
-      setError((err as Error).message ?? 'Login failed');
+      setError(getFriendlyLoginError(err));
     } finally {
       setLoading(false);
     }
@@ -39,7 +53,10 @@ export function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="flex items-start gap-3 bg-red-500/8 border border-red-500/20 text-red-400 text-sm rounded-xl px-4 py-3">
+            <div
+              aria-live="polite"
+              className="flex items-start gap-3 bg-red-500/8 border border-red-500/20 text-red-400 text-sm rounded-xl px-4 py-3"
+            >
               <AlertCircle size={15} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>

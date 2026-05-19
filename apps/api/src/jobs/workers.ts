@@ -24,7 +24,13 @@ import {
   type CROAuditJobData,
   type ContentOptimizationJobData,
   type ScraperRefreshJobData,
-  getEmailSendQueue,
+  type ReachScanJobData,
+  type ReachEnrichJobData,
+  type OutreachSendJobData,
+  type SeoBatchAccumulatorJobData,
+  type EmbedBackfillJobData,
+  type DeadLetterJobData,
+  getDeadLetterQueue,
 } from './queue.js';
 
 // Lazy job-handler imports (avoid circular deps at module load time)
@@ -108,6 +114,31 @@ async function processScraperRefreshJob(job: Job<ScraperRefreshJobData>) {
   return processScraperRefresh(job.data);
 }
 
+async function processReachScanJob(job: Job<ReachScanJobData>) {
+  const { runReachScan } = await import('./handlers/reach-scan.job.js');
+  return runReachScan(job.data);
+}
+
+async function processReachEnrichJob(job: Job<ReachEnrichJobData>) {
+  const { runReachEnrich } = await import('./handlers/reach-enrich.job.js');
+  return runReachEnrich(job.data);
+}
+
+async function processOutreachSendJob(job: Job<OutreachSendJobData>) {
+  const { runOutreachSend } = await import('./handlers/outreach-send.job.js');
+  return runOutreachSend(job.data);
+}
+
+async function processSeoBatchAccumulatorJob(job: Job<SeoBatchAccumulatorJobData>) {
+  const { runSeoBatchAccumulator } = await import('./handlers/seo-batch-accumulator.job.js');
+  return runSeoBatchAccumulator(job.data);
+}
+
+async function processEmbedBackfillJob(job: Job<EmbedBackfillJobData>) {
+  const { runEmbedBackfill } = await import('./handlers/embed-backfill.job.js');
+  return runEmbedBackfill(job.data);
+}
+
 // ── Worker registry ───────────────────────────────────────────────────────────
 
 const activeWorkers: Worker[] = [];
@@ -115,6 +146,7 @@ const activeWorkers: Worker[] = [];
 /** Start all BullMQ workers. Called once on server startup. */
 export async function startWorkers(): Promise<void> {
   const conn = getRedisOpts();
+  const deadLetterQueue = getDeadLetterQueue();
 
   const intentWorker = new Worker<IntentJobData>('intent-processing', processIntentJob, {
     connection: conn,
@@ -244,6 +276,45 @@ export async function startWorkers(): Promise<void> {
     },
   );
 
+  const reachScanWorker = new Worker<ReachScanJobData>('reach-scan', processReachScanJob, {
+    connection: conn,
+    concurrency: 2,
+    limiter: { max: 5, duration: 60_000 },
+  });
+
+  const reachEnrichWorker = new Worker<ReachEnrichJobData>('reach-enrich', processReachEnrichJob, {
+    connection: conn,
+    concurrency: 5,
+  });
+
+  const outreachSendWorker = new Worker<OutreachSendJobData>(
+    'outreach-send',
+    processOutreachSendJob,
+    {
+      connection: conn,
+      concurrency: 2,
+      limiter: { max: 20, duration: 60_000 },
+    },
+  );
+
+  const seoBatchAccumulatorWorker = new Worker<SeoBatchAccumulatorJobData>(
+    'seo-batch-accumulator',
+    processSeoBatchAccumulatorJob,
+    {
+      connection: conn,
+      concurrency: 1, // only one flush at a time
+    },
+  );
+
+  const embedBackfillWorker = new Worker<EmbedBackfillJobData>(
+    'embed-backfill',
+    processEmbedBackfillJob,
+    {
+      connection: conn,
+      concurrency: 1,
+    },
+  );
+
   for (const worker of [
     intentWorker,
     scoringWorker,
@@ -261,6 +332,11 @@ export async function startWorkers(): Promise<void> {
     croAuditWorker,
     contentOptimizationWorker,
     scraperRefreshWorker,
+    reachScanWorker,
+    reachEnrichWorker,
+    outreachSendWorker,
+    seoBatchAccumulatorWorker,
+    embedBackfillWorker,
   ]) {
     worker.on('completed', (job) => {
       console.info(`[${worker.name}] Job ${job.id} completed`);
@@ -268,6 +344,30 @@ export async function startWorkers(): Promise<void> {
 
     worker.on('failed', (job, err) => {
       console.error(`[${worker.name}] Job ${job?.id} failed:`, (err as Error).message);
+
+      if (!job) {
+        return;
+      }
+
+      const dlqPayload: DeadLetterJobData = {
+        sourceQueue: worker.name,
+        sourceJobId: String(job.id ?? ''),
+        sourceJobName: job.name,
+        attemptsMade: job.attemptsMade,
+        failedReason: (err as Error).message,
+        payload: (job.data ?? {}) as Record<string, unknown>,
+        failedAt: new Date().toISOString(),
+      };
+
+      deadLetterQueue
+        .add('dead-letter-capture', dlqPayload, {
+          jobId: `dlq:${worker.name}:${String(job.id ?? '')}:${job.attemptsMade}`,
+          removeOnComplete: { count: 5000 },
+          removeOnFail: false,
+        })
+        .catch((dlqErr) => {
+          console.error(`[${worker.name}] Failed to push job ${job.id} to DLQ:`, dlqErr);
+        });
     });
 
     activeWorkers.push(worker);
@@ -347,6 +447,28 @@ async function scheduleAgentJobs(): Promise<void> {
     'seo-intelligence-weekly',
     { scope: 'full', triggeredBy: 'scheduled' },
     { repeat: { pattern: '0 3 * * 1' } },
+  );
+
+  // Reach scan: every 4 hours for Egyptian RE market signals
+  const { getReachScanQueue, getSeoBatchAccumulatorQueue, getEmbedBackfillQueue } = await import('./queue.js');
+  await getReachScanQueue().add(
+    'reach-scan-scheduled',
+    { query: 'egypt real estate', triggeredBy: 'scheduled' },
+    { repeat: { pattern: '0 */4 * * *' } },
+  );
+
+  // SEO batch flush: every 10 minutes
+  await getSeoBatchAccumulatorQueue().add(
+    'seo-batch-flush',
+    { reason: 'scheduled', triggeredBy: 'scheduled' },
+    { repeat: { pattern: '*/10 * * * *' } },
+  );
+
+  // Embedding backfill: nightly at 2 AM
+  await getEmbedBackfillQueue().add(
+    'embed-backfill-nightly',
+    { entity: 'all', triggeredBy: 'scheduled' },
+    { repeat: { pattern: '0 2 * * *' } },
   );
 
   console.info('[Workers] Scheduled agent jobs registered');

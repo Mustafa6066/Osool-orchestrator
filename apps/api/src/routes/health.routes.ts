@@ -12,6 +12,20 @@ import { getRedis } from '../lib/redis.js';
 import { db } from '@osool/db';
 import { sql } from 'drizzle-orm';
 import { getAllCircuitBreakerStats } from '@osool/shared';
+import { getConfig } from '../config.js';
+
+async function checkHttpDependency(url: string, timeoutMs = 3000): Promise<{ status: 'healthy' | 'down'; detail?: string; latencyMs?: number }> {
+  const started = Date.now();
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) {
+      return { status: 'down', detail: `HTTP ${res.status}`, latencyMs: Date.now() - started };
+    }
+    return { status: 'healthy', latencyMs: Date.now() - started };
+  } catch {
+    return { status: 'down', detail: 'Request failed', latencyMs: Date.now() - started };
+  }
+}
 
 export const healthRoutes: FastifyPluginAsync = async (app) => {
   // ── Basic liveness (Railway healthcheck) ────────────────────────────────
@@ -62,6 +76,77 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  // ── Strict readiness (for traffic routing) ─────────────────────────────
+  app.get(
+    '/ready',
+    {
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              status: { type: 'string' },
+              timestamp: { type: 'string' },
+              checks: { type: 'object', additionalProperties: true },
+            },
+          },
+          503: {
+            type: 'object',
+            properties: {
+              status: { type: 'string' },
+              timestamp: { type: 'string' },
+              checks: { type: 'object', additionalProperties: true },
+            },
+          },
+        },
+      },
+    },
+    async (_req, reply) => {
+      const cfg = getConfig();
+      const strictExternal = (process.env.STRICT_READINESS_EXTERNAL ?? '').toLowerCase() === 'true';
+
+      const checks: Record<string, { status: 'healthy' | 'down' | 'degraded'; detail?: string; latencyMs?: number }> = {
+        postgres: { status: 'healthy' },
+        redis: { status: 'healthy' },
+        osoolPlatform: { status: 'degraded', detail: 'Skipped' },
+        mempalace: { status: 'degraded', detail: 'Skipped' },
+      };
+
+      try {
+        await db.execute(sql`SELECT 1`);
+      } catch {
+        checks.postgres = { status: 'down', detail: 'Database query failed' };
+      }
+
+      try {
+        const redis = getRedis();
+        await redis.ping();
+      } catch {
+        checks.redis = { status: 'down', detail: 'Redis ping failed' };
+      }
+
+      const platformHealthUrl = `${cfg.OSOOL_API_URL.replace(/\/$/, '')}/api/health`;
+      checks.osoolPlatform = await checkHttpDependency(platformHealthUrl, 4000);
+
+      const mempalaceBase = (process.env.MEMPALACE_URL ?? 'http://mempalace:8100').replace(/\/$/, '');
+      checks.mempalace = await checkHttpDependency(`${mempalaceBase}/health`, 3000);
+
+      const requiredChecks = ['postgres', 'redis'] as const;
+      const externalChecks = ['osoolPlatform', 'mempalace'] as const;
+      const coreReady = requiredChecks.every((name) => checks[name].status === 'healthy');
+      const externalReady = externalChecks.every((name) => checks[name].status === 'healthy');
+      const ready = coreReady && (!strictExternal || externalReady);
+      const statusCode = ready ? 200 : 503;
+
+      return reply.status(statusCode).send({
+        status: ready ? 'ready' : 'not_ready',
+        timestamp: new Date().toISOString(),
+        strictExternal,
+        checks,
+      });
+    },
+  );
+
   // ── Deep diagnostics ───────────────────────────────────────────────────
   app.get(
     '/health/deep',
@@ -77,11 +162,13 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
     },
     async (_req, reply) => {
       const redis = getRedis();
+      const cfg = getConfig();
       const report: Record<string, unknown> = {
         timestamp: new Date().toISOString(),
         services: {},
         agents: {},
         queues: {},
+        dlq: {},
         circuitBreakers: [],
         events: {},
       };
@@ -106,6 +193,14 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
       } catch {
         services.redis = { status: 'down' };
       }
+
+      const platformHealthUrl = `${cfg.OSOOL_API_URL.replace(/\/$/, '')}/api/health`;
+      const platformStatus = await checkHttpDependency(platformHealthUrl, 4000);
+      services.osoolPlatform = platformStatus;
+
+      const mempalaceBase = (process.env.MEMPALACE_URL ?? 'http://mempalace:8100').replace(/\/$/, '');
+      const mempalaceStatus = await checkHttpDependency(`${mempalaceBase}/health`, 3000);
+      services.mempalace = mempalaceStatus;
 
       report.services = services;
 
@@ -133,7 +228,7 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
         'email-send', 'email-trigger', 'feedback-loop', 'market-pulse',
         'notification-push', 'scraper-event', 'experiment-scoring',
         'content-quality-gate', 'seo-intelligence', 'cro-audit',
-        'content-optimization', 'scraper-refresh',
+        'content-optimization', 'scraper-refresh', 'dead-letter',
       ];
       const queues: Record<string, unknown> = {};
 
@@ -150,6 +245,24 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
       }
 
       report.queues = queues;
+
+      // ── DLQ replay metrics ───────────────────────────────────────────
+      try {
+        const [replayTotalRaw, replayLastTs, dlqWaiting, dlqFailed] = await Promise.all([
+          redis.get('dlq:replays:total'),
+          redis.get('dlq:replays:last_ts'),
+          redis.llen('bull:dead-letter:wait'),
+          redis.zcard('bull:dead-letter:failed'),
+        ]);
+        report.dlq = {
+          waiting: dlqWaiting,
+          failed: dlqFailed,
+          replayTotal: Number(replayTotalRaw ?? '0'),
+          replayLastTs: replayLastTs ?? null,
+        };
+      } catch {
+        report.dlq = { status: 'unavailable' };
+      }
 
       // ── Circuit breakers ──────────────────────────────────────────────
       report.circuitBreakers = getAllCircuitBreakerStats();

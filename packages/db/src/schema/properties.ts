@@ -1,4 +1,20 @@
-import { pgTable, uuid, text, timestamp, varchar, integer, numeric, boolean, jsonb, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, varchar, integer, numeric, boolean, jsonb, index, customType } from 'drizzle-orm/pg-core';
+
+/**
+ * Custom pgvector type — requires the vector extension to be enabled.
+ * Coordinate with Railway support to run: CREATE EXTENSION IF NOT EXISTS vector;
+ */
+const vector = customType<{ data: number[]; driverData: string }>({
+  dataType(config) {
+    return `vector(${(config as { dimensions?: number } | undefined)?.dimensions ?? 1536})`;
+  },
+  fromDriver(value: string) {
+    return value.slice(1, -1).split(',').map(Number);
+  },
+  toDriver(value: number[]) {
+    return `[${value.join(',')}]`;
+  },
+});
 
 export const developers = pgTable('developers', {
   id: varchar('id', { length: 100 }).primaryKey(),
@@ -43,6 +59,12 @@ export const properties = pgTable('properties', {
   featured: boolean('featured').default(false),
   active: boolean('active').default(true),
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+  /**
+   * 1536-dimensional pgvector embedding for semantic similarity search.
+   * Populated asynchronously by the embed-backfill BullMQ job.
+   * Requires CREATE EXTENSION IF NOT EXISTS vector on the Postgres instance.
+   */
+  embedding: vector('embedding', { dimensions: 1536 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [

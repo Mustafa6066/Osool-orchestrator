@@ -19,6 +19,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
+import { Queue } from 'bullmq';
+import type { JobType } from 'bullmq';
 import {
   signAccessToken,
   signRefreshToken,
@@ -27,7 +29,8 @@ import {
   extractBearerToken,
 } from '../lib/auth.js';
 import { getConfig } from '../config.js';
-import { getRedis, isRedisConfigured } from '../lib/redis.js';
+import { getRedis, getRedisOpts, isRedisConfigured } from '../lib/redis.js';
+import { getDeadLetterQueue, type DeadLetterJobData } from '../jobs/queue.js';
 import { db } from '@osool/db';
 import {
   intentSignals,
@@ -59,6 +62,30 @@ import {
 } from 'drizzle-orm';
 import type { DashboardResponse } from '@osool/shared';
 
+const ALLOWED_REPLAY_QUEUES = new Set([
+  'intent-processing',
+  'lead-scoring',
+  'audience-sync',
+  'seo-content-gen',
+  'email-send',
+  'email-trigger',
+  'feedback-loop',
+  'market-pulse',
+  'notification-push',
+  'scraper-event',
+  'experiment-scoring',
+  'content-quality-gate',
+  'seo-intelligence',
+  'cro-audit',
+  'content-optimization',
+  'scraper-refresh',
+  'reach-scan',
+  'reach-enrich',
+  'outreach-send',
+  'seo-batch-accumulator',
+  'embed-backfill',
+]);
+
 // ── JWT Guard ─────────────────────────────────────────────────────────────────
 
 async function requireAdmin(req: { headers: Record<string, string | string[] | undefined> }, reply: { status: (n: number) => { send: (v: unknown) => void } }) {
@@ -73,6 +100,18 @@ async function requireAdmin(req: { headers: Record<string, string | string[] | u
     return false;
   }
   return true;
+}
+
+function createReplayQueue(queueName: string): Queue<Record<string, unknown>> {
+  return new Queue<Record<string, unknown>>(queueName, {
+    connection: getRedisOpts(),
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2000 },
+      removeOnComplete: { count: 500 },
+      removeOnFail: { count: 1000 },
+    },
+  });
 }
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
@@ -188,6 +227,124 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // ── Dead-letter queue controls (self-healing) ───────────────────────────
+
+  const dlqListQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+    state: z.enum(['waiting', 'active', 'delayed', 'completed', 'failed']).optional(),
+  });
+
+  app.get('/dlq', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const parsed = dlqListQuerySchema.safeParse(req.query ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid query', details: parsed.error.flatten() });
+    }
+
+    const dlq = getDeadLetterQueue();
+    const states: JobType[] = parsed.data.state
+      ? [parsed.data.state === 'waiting' ? 'wait' : parsed.data.state]
+      : ['wait', 'active', 'delayed', 'completed', 'failed'];
+
+    const jobs = await dlq.getJobs(states, 0, parsed.data.limit - 1, true);
+
+    return reply.send({
+      total: jobs.length,
+      jobs: jobs.map((job) => ({
+        id: job.id,
+        name: job.name,
+        state: job.finishedOn ? 'completed' : 'pending',
+        timestamp: job.timestamp,
+        finishedOn: job.finishedOn,
+        attemptsMade: job.attemptsMade,
+        data: job.data,
+      })),
+    });
+  });
+
+  const dlqReplayBodySchema = z.object({
+    dlqJobId: z.string().min(1),
+    removeAfterReplay: z.boolean().default(false),
+    forceReplay: z.boolean().default(false),
+  });
+
+  app.post('/dlq/replay', async (req, reply) => {
+    if (!(await requireAdmin(req as never, reply as never))) return;
+
+    const parsed = dlqReplayBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid payload', details: parsed.error.flatten() });
+    }
+
+    const dlq = getDeadLetterQueue();
+    const dlqJob = await dlq.getJob(parsed.data.dlqJobId);
+    if (!dlqJob) {
+      return reply.status(404).send({ error: 'DLQ job not found' });
+    }
+
+    const payload = dlqJob.data as Partial<DeadLetterJobData>;
+    if (!payload.sourceQueue || !payload.sourceJobName || !payload.payload) {
+      return reply.status(400).send({ error: 'DLQ payload missing replay metadata' });
+    }
+    if (!ALLOWED_REPLAY_QUEUES.has(payload.sourceQueue)) {
+      return reply.status(400).send({ error: `Replay to queue "${payload.sourceQueue}" is not allowed` });
+    }
+
+    const redis = isRedisConfigured() ? getRedis() : null;
+    const replayCountKey = `dlq:replay-count:${parsed.data.dlqJobId}`;
+    const priorReplayCount = redis ? Number(await redis.get(replayCountKey) ?? '0') : 0;
+    if (!parsed.data.forceReplay && priorReplayCount >= 3) {
+      return reply.status(409).send({
+        error: 'Replay limit reached for this DLQ job',
+        replayCount: priorReplayCount,
+        hint: 'Use forceReplay=true only after root-cause fix verification',
+      });
+    }
+
+    const targetQueue = createReplayQueue(payload.sourceQueue);
+    try {
+      const replayJob = await targetQueue.add(
+        payload.sourceJobName,
+        payload.payload,
+        {
+          jobId: `replay:${payload.sourceQueue}:${payload.sourceJobId ?? 'unknown'}:${Date.now()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+        },
+      );
+
+      if (parsed.data.removeAfterReplay) {
+        await dlqJob.remove();
+      } else {
+        await dlqJob.log(
+          `Replayed at ${new Date().toISOString()} as job ${String(replayJob.id ?? '')}`,
+        );
+      }
+
+      if (redis) {
+        await redis.multi()
+          .incr(replayCountKey)
+          .expire(replayCountKey, 30 * 24 * 3600)
+          .incr('dlq:replays:total')
+          .set('dlq:replays:last_ts', new Date().toISOString())
+          .incr(`dlq:replays:queue:${payload.sourceQueue}`)
+          .exec();
+      }
+
+      return reply.send({
+        replayed: true,
+        sourceQueue: payload.sourceQueue,
+        sourceJobName: payload.sourceJobName,
+        replayJobId: replayJob.id,
+        removedFromDlq: parsed.data.removeAfterReplay,
+        replayCount: priorReplayCount + 1,
+      });
+    } finally {
+      await targetQueue.close();
+    }
+  });
 
   // ── Dashboard ─────────────────────────────────────────────────────────────
 

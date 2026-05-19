@@ -4,6 +4,7 @@ import { db } from '@osool/db';
 import { chatSessions, intentSignals } from '@osool/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 import { getRedis } from '../lib/redis.js';
+import { remember, userWing } from '../services/mempalace-bridge.service.js';
 
 /**
  * Integration Agent — orchestrates lead scoring, email trigger evaluation,
@@ -36,9 +37,41 @@ export class IntegrationAgent extends BaseAgent {
     );
     await this.logToRedis(`Integration: ${sessionIds.length} scoring jobs queued`);
 
+    // ── MemPalace: write lead scores to user wings ──────────────────────────
+    // Fire-and-forget after all scoring jobs are queued.
+    // Each score write includes the session score and ICP segment.
+    const redis = getRedis();
+    const scoreWritePromises = sessionIds.map(async (sid) => {
+      const scoreStr = await redis.get(`lead:score:session:${sid}`);
+      if (!scoreStr) return;
+      const scoreData = JSON.parse(scoreStr) as {
+        score?: number;
+        tier?: string;
+        segment?: string;
+        reasoning?: string;
+        userId?: string;
+      };
+      if (!scoreData.score) return;
+
+      const wing = scoreData.userId ? userWing(scoreData.userId) : `session:${sid}`;
+      await remember({
+        wing,
+        room: 'lead-history',
+        text: `Lead score: ${scoreData.score}/100 (${scoreData.tier ?? 'unknown'}). ${scoreData.reasoning ?? ''}`.trim(),
+        metadata: {
+          sessionId: sid,
+          score: scoreData.score,
+          tier: scoreData.tier,
+          segment: scoreData.segment,
+        },
+      });
+    });
+    // Run writes in parallel without blocking the main flow
+    Promise.all(scoreWritePromises).catch(() => { /* non-critical */ });
+    // ───────────────────────────────────────────────────────────────────────
+
     // Evaluate email triggers for each session — enrich payload from Redis + DB
     const emailTriggerQueue = getEmailTriggerQueue();
-    const redis = getRedis();
 
     await Promise.all(
       sessionIds.map(async (sid) => {

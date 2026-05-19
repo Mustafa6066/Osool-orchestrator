@@ -22,6 +22,7 @@ import { webhookRoutes } from './routes/webhook.routes.js';
 import { dataRoutes } from './routes/data.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
+import { registerSkillsRoutes } from './routes/skills.js';
 import { startWorkers, stopWorkers } from './jobs/workers.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { bootstrapPlugins } from './agents/brain/plugins/registry.js';
@@ -101,6 +102,7 @@ async function build() {
   await app.register(webhookRoutes, { prefix: '/webhooks' });
   await app.register(dataRoutes, { prefix: '/data' });
   await app.register(adminRoutes, { prefix: '/admin' });
+  await registerSkillsRoutes(app);
 
   return app;
 }

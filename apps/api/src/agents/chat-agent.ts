@@ -8,6 +8,12 @@ import type { AgentContext } from '@osool/shared';
 import { ConsensusRouter } from './brain/consensus-router.js';
 import { classifyIntent } from './intent-agent.js';
 import { trackLLMCost } from '../lib/llm-cost-tracker.js';
+import {
+  recall,
+  remember,
+  userWing,
+  segmentWing,
+} from '../services/mempalace-bridge.service.js';
 
 const anthropic = new Anthropic({ apiKey: getConfig().ANTHROPIC_API_KEY });
 const consensusRouter = new ConsensusRouter();
@@ -58,6 +64,20 @@ export interface ChatOutput {
   contributors?: Array<{ pluginName: string; slot: string; confidence: number }>;
 }
 
+/**
+ * Map an intent type to a MemPalace room name.
+ */
+function intentToRoom(intentType: string): string {
+  const map: Record<string, string> = {
+    pricing: 'pricing',
+    comparison: 'comparison',
+    financing: 'financing',
+    legal: 'legal',
+    objection: 'objections',
+  };
+  return map[intentType] ?? 'comparison';
+}
+
 export async function chat(input: ChatInput): Promise<ChatOutput> {
   const startTime = Date.now();
 
@@ -68,15 +88,30 @@ export async function chat(input: ChatInput): Promise<ChatOutput> {
     .where(eq(chatMessages.sessionId, input.sessionId))
     .orderBy(chatMessages.createdAt);
 
-  // Store user message
+  // Classify intent for context enrichment
+  const intent = classifyIntent(input.message);
+
+  // ── MemPalace recall ────────────────────────────────────────────────────────
+  // Retrieve relevant memories from MemPalace before building the system prompt.
+  // Use the user's personal wing if we have a userId, else fall back to ICP segment wing.
+  const wing = input.userId ? userWing(input.userId) : segmentWing('domestic_hnw');
+  const room = intentToRoom(intent.intentType);
+
+  const memories = await recall({ wing, room, query: input.message, k: 5 });
+  const recallIds = memories.map((m) => m.drawerId);
+  const memoryContext =
+    memories.length > 0
+      ? `\n\n## Relevant context from previous conversations:\n${memories.map((m) => `- ${m.text}`).join('\n')}`
+      : '';
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Store user message (after recall so we can capture recall IDs)
   await db.insert(chatMessages).values({
     sessionId: input.sessionId,
     role: 'user',
     content: input.message,
+    memoryRecallIds: recallIds,
   });
-
-  // Classify intent for context enrichment
-  const intent = classifyIntent(input.message);
 
   // Detect locale from message
   const isArabic = /[\u0600-\u06FF\u0750-\u077F]/.test(input.message);
@@ -120,7 +155,7 @@ export async function chat(input: ChatInput): Promise<ChatOutput> {
     const response = await anthropic.messages.create({
       model: getConfig().ANTHROPIC_MODEL,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT + memoryContext,
       messages,
     });
 
@@ -145,6 +180,23 @@ export async function chat(input: ChatInput): Promise<ChatOutput> {
 
   const latencyMs = Date.now() - startTime;
 
+  // ── MemPalace remember ──────────────────────────────────────────────────────
+  // Fire-and-forget — do not block reply delivery
+  const userDrawerPromise = remember({
+    wing,
+    room,
+    text: `User: ${input.message}`,
+    metadata: { sessionId: input.sessionId, intentType: intent.intentType },
+  });
+  const assistantDrawerPromise = remember({
+    wing,
+    room,
+    text: `Assistant: ${reply}`,
+    metadata: { sessionId: input.sessionId, intentType: intent.intentType },
+  });
+  const [userDrawerId] = await Promise.all([userDrawerPromise, assistantDrawerPromise]);
+  // ───────────────────────────────────────────────────────────────────────────
+
   // Store assistant reply
   await db.insert(chatMessages).values({
     sessionId: input.sessionId,
@@ -152,6 +204,8 @@ export async function chat(input: ChatInput): Promise<ChatOutput> {
     content: reply,
     tokensUsed,
     latencyMs,
+    memoryDrawerId: userDrawerId ?? undefined,
+    memoryRecallIds: recallIds,
   });
 
   // Update session stats

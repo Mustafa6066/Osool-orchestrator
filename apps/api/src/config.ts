@@ -17,9 +17,23 @@ const schema = z.object({
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),
 
-  // AI
+  // AI — Anthropic
   ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-20250514'),
+  ANTHROPIC_MODEL_HAIKU: z.string().default('claude-haiku-4-5'),
+  ANTHROPIC_MODEL_SONNET: z.string().default('claude-sonnet-4-20250514'),
+  ANTHROPIC_MODEL_OPUS: z.string().default('claude-opus-4-5'),
+
+  // AI — OpenAI (embeddings)
+  OPENAI_API_KEY: z.string().optional(),
+
+  // Observability — Langfuse
+  LANGFUSE_PUBLIC_KEY: z.string().optional(),
+  LANGFUSE_SECRET_KEY: z.string().optional(),
+  LANGFUSE_HOST: z.string().default('https://cloud.langfuse.com'),
+
+  // MemPalace sidecar
+  MEMPALACE_URL: z.string().default('http://mempalace:8100'),
 
   // Email
   RESEND_API_KEY: z.string().optional(),

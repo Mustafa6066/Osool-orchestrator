@@ -13,6 +13,7 @@ import { nexusAgent } from './agents/nexus.agent.js';
 import { marketingAgent } from './agents/marketing.agent.js';
 import { integrationAgent } from './agents/integration.agent.js';
 import { experimentAgent } from './agents/experiment.agent.js';
+import { outreachAgent } from './agents/outreach.agent.js';
 import { registerAgentReactions } from './events/agent-events.js';
 import type { FastifyBaseLogger } from 'fastify';
 
@@ -63,6 +64,14 @@ export function startScheduler(log: FastifyBaseLogger): void {
     void runExperiment();
     timers.push(setInterval(() => void runExperiment(), 4 * HOUR));
   }, 7 * MINUTE));
+
+  // ── Outreach — every 4 hours ───────────────────────────────────────────────
+  const runOutreach = () => runAgent('outreach', () => outreachAgent.execute(), log);
+  // Delay 10 min on startup so nexus + integration have warmed up
+  timers.push(setTimeout(() => {
+    void runOutreach();
+    timers.push(setInterval(() => void runOutreach(), 4 * HOUR));
+  }, 10 * MINUTE));
 
   log.info('[scheduler] ✅ Hybrid scheduler started (intervals + event reactions)');
 }

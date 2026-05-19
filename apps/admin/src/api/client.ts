@@ -246,3 +246,37 @@ export async function getChatSessions(params?: { page?: number; limit?: number }
 export async function getEmailSequences() {
   return request<{ sequences: unknown[] }>('/admin/email-sequences');
 }
+
+// ── Skills ────────────────────────────────────────────────────────────────────
+
+export interface Skill {
+  id: string;
+  name: string;
+  version: string;
+  description: string | null;
+  targetAgents: string[];
+  enabled: boolean;
+  config: Record<string, unknown>;
+  promptFragment: string | null;
+  toolsJson: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getSkills() {
+  return request<Skill[]>('/admin/skills');
+}
+
+export async function toggleSkill(id: string, enabled: boolean) {
+  return request<Skill>(`/admin/skills/${id}/toggle`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function updateSkill(id: string, data: Partial<Omit<Skill, 'id' | 'createdAt' | 'updatedAt'>>) {
+  return request<Skill>(`/admin/skills/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}

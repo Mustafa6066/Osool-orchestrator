@@ -15,10 +15,18 @@ import { db } from '@osool/db';
 import { users, notifications } from '@osool/db/schema';
 import { isNotNull, sql } from 'drizzle-orm';
 import { getRedis } from '../../lib/redis.js';
+import { getCircuitBreaker } from '@osool/shared';
+import { fetchWithRetry } from '../../lib/http-resilience.js';
 
 export interface NotificationPushJobData {
   triggeredBy?: string;
 }
+
+const whatsappPushBreaker = getCircuitBreaker('whatsapp-push-http', {
+  failureThreshold: 5,
+  resetTimeoutMs: 60_000,
+  successThreshold: 2,
+});
 
 export async function runNotificationPush(
   _data: NotificationPushJobData,
@@ -139,19 +147,25 @@ export async function runNotificationPush(
             const messageBody = u.language === 'ar' ? notif.bodyAr : notif.body;
 
             try {
-              await fetch(`https://graph.facebook.com/v18.0/${whatsappPhoneId}/messages`, {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${whatsappToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  messaging_product: 'whatsapp',
-                  to: phone,
-                  type: 'text',
-                  text: { body: `🏠 Osool Investment Pulse\n\n${messageBody}` },
-                }),
-              });
+              await whatsappPushBreaker.execute(() =>
+                fetchWithRetry(
+                  `https://graph.facebook.com/v18.0/${whatsappPhoneId}/messages`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${whatsappToken}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      messaging_product: 'whatsapp',
+                      to: phone,
+                      type: 'text',
+                      text: { body: `🏠 Osool Investment Pulse\n\n${messageBody}` },
+                    }),
+                  },
+                  { serviceName: 'whatsapp_notification_push', maxAttempts: 3, timeoutMs: 10_000 },
+                ),
+              );
             } catch {
               // Silent — WhatsApp delivery is best-effort
             }

@@ -13,6 +13,7 @@ import { IntentsPage } from './pages/Intents';
 import { FeedbackLoopsPage } from './pages/FeedbackLoops';
 import { LeadsPage } from './pages/Leads';
 import { KeywordsPage } from './pages/Keywords';
+import { SkillsPage } from './pages/Skills';
 
 function PrivateRoute() {
   const { authed, loading } = useAuth();
@@ -44,6 +45,7 @@ function AuthWrapper() {
             <Route path="/chat-sessions" element={<ChatSessionsPage />} />
             <Route path="/waitlist" element={<WaitlistPage />} />
             <Route path="/leads" element={<LeadsPage />} />
+            <Route path="/skills" element={<SkillsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Route>

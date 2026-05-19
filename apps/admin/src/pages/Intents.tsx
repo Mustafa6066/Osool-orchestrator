@@ -58,7 +58,8 @@ function IntentsList() {
         <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl px-6 py-4 mb-4">{error}</div>
       )}
       <div className="bg-surface-card rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="border-b border-border">
               <th className="text-left px-5 py-4 text-xs font-semibold text-zinc-600 uppercase tracking-widest">Type</th>
@@ -105,6 +106,7 @@ function IntentsList() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {totalPages > 1 && (

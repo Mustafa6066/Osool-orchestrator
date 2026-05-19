@@ -75,6 +75,21 @@ services:
     environment:
       VITE_API_URL: http://localhost:4000
 
+  mempalace:
+    build:
+      context: ./services/mempalace
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+    volumes:
+      - mempalacedata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   # Nightly PostgreSQL backup — dumps to ./backups/ on the host
   pg-backup:
     image: postgres:16-alpine
@@ -104,3 +119,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  mempalacedata:

@@ -16,6 +16,8 @@
     "@fastify/swagger": "^8.15.0",
     "@fastify/swagger-ui": "^4.1.0",
     "@osool/db": "workspace:*",
+    "@osool/llm": "workspace:*",
+    "@osool/reach": "workspace:*",
     "@osool/shared": "workspace:*",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.25.0",
@@ -23,6 +25,7 @@
     "fastify": "^4.28.0",
     "ioredis": "^5.4.0",
     "jsonwebtoken": "^9.0.2",
+    "openai": "^4.104.0",
     "posthog-node": "^4.3.0",
     "resend": "^4.0.0",
     "zod": "^3.23.0"

@@ -1,6 +1,12 @@
 import { getRedis } from '../lib/redis.js';
+import { loadSkillsFor, composeSkillPrompt, composeSkillTools, type Skill } from '../skills/loader.js';
 
 export type AgentStatus = 'idle' | 'running' | 'error';
+
+export interface ActiveSkills {
+  systemPromptAdditions: string;
+  toolAdditions: Skill['toolsJson'];
+}
 
 /**
  * Abstract base class for all Osool autonomous agents.
@@ -63,6 +69,24 @@ export abstract class BaseAgent {
    * Execute the agent's core logic. Subclasses must implement this.
    */
   abstract run(payload?: unknown): Promise<void>;
+
+  /**
+   * Load active skills for this agent and compose them into
+   * system prompt additions and extra tool definitions.
+   * Called once per execute() cycle.
+   */
+  protected async getActiveSkills(): Promise<ActiveSkills> {
+    try {
+      const skills = await loadSkillsFor(this.name);
+      return {
+        systemPromptAdditions: composeSkillPrompt(skills),
+        toolAdditions: composeSkillTools(skills),
+      };
+    } catch {
+      // Skills are a non-critical enhancement — never block the agent
+      return { systemPromptAdditions: '', toolAdditions: null };
+    }
+  }
 
   /**
    * Public entrypoint — wraps run() with status bookkeeping and error logging.

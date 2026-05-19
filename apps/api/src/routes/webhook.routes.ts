@@ -12,12 +12,16 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import { getConfig } from '../config.js';
 import { safeCompare, verifyWebhookSignature } from '../lib/auth.js';
 import { getRedis } from '../lib/redis.js';
 import { getIntentQueue, getAudienceSyncQueue, getScraperEventQueue } from '../jobs/queue.js';
 import { db } from '@osool/db';
 import { intentSignals, funnelEvents, chatSessions, waitlist as waitlistTable, users } from '@osool/db/schema';
+
+const WEBHOOK_MAX_SKEW_SECONDS = 5 * 60;
+const WEBHOOK_NONCE_TTL_SECONDS = 10 * 60;
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
@@ -119,19 +123,87 @@ function checkWebhookSecret(
  * Verify webhook request authenticity.
  * Supports both HMAC body signature (preferred) and shared secret header (legacy).
  */
-function verifyWebhookRequest(
-  req: { headers: Record<string, string | string[] | undefined>; body: unknown },
-): boolean {
-  const cfg = getConfig();
-  const secretHeader = req.headers['x-webhook-secret'] as string | undefined;
-  const signatureHeader = req.headers['x-webhook-signature'] as string | undefined;
+function getHeaderValue(headers: Record<string, string | string[] | undefined>, key: string): string | undefined {
+  const value = headers[key];
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
 
-  return verifyWebhookSignature(
-    JSON.stringify(req.body),
+function parseWebhookTimestamp(raw: string | undefined): number | null {
+  if (!raw) return null;
+
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) {
+    // Accept both seconds and milliseconds epochs.
+    return numeric > 1e12 ? numeric : numeric * 1000;
+  }
+
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function verifyWebhookRequest(
+  req: {
+    headers: Record<string, string | string[] | undefined>;
+    body: unknown;
+    log?: { warn?: (payload: unknown, message?: string) => void };
+  },
+): Promise<boolean> {
+  const cfg = getConfig();
+  const secretHeader = getHeaderValue(req.headers, 'x-webhook-secret');
+  const signatureHeader = getHeaderValue(req.headers, 'x-webhook-signature');
+  const timestampHeader = getHeaderValue(req.headers, 'x-webhook-timestamp');
+  const nonceHeader = getHeaderValue(req.headers, 'x-webhook-nonce');
+  const body = JSON.stringify(req.body);
+
+  const authorized = verifyWebhookSignature(
+    body,
     signatureHeader,
     secretHeader,
     cfg.WEBHOOK_SECRET,
   );
+
+  if (!authorized) {
+    return false;
+  }
+
+  // Legacy secret-header integrations continue to work without timestamp/nonce.
+  // Replay protection is enforced when signature headers are provided.
+  if (!signatureHeader) {
+    return true;
+  }
+
+  const tsMs = parseWebhookTimestamp(timestampHeader);
+  if (!tsMs) {
+    return false;
+  }
+
+  const nowMs = Date.now();
+  const skewMs = Math.abs(nowMs - tsMs);
+  if (skewMs > WEBHOOK_MAX_SKEW_SECONDS * 1000) {
+    return false;
+  }
+
+  const nonce = nonceHeader || createHash('sha256').update(`${signatureHeader}|${timestampHeader}|${body}`).digest('hex');
+  const dedupeKey = `webhook:nonce:${nonce}`;
+
+  try {
+    const redis = getRedis();
+    const setResult = await redis.set(dedupeKey, '1', 'EX', WEBHOOK_NONCE_TTL_SECONDS, 'NX');
+    if (setResult !== 'OK') {
+      return false;
+    }
+  } catch (err) {
+    req.log?.warn?.({ err }, 'Webhook replay protection unavailable — allowing request');
+  }
+
+  return true;
+}
+
+function makeJobId(prefix: string, stableParts: Array<string | number | undefined>): string {
+  const raw = stableParts.map((part) => String(part ?? '')).join('|');
+  const digest = createHash('sha256').update(raw).digest('hex').slice(0, 20);
+  return `${prefix}:${digest}`;
 }
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
@@ -145,7 +217,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/chat-message',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      if (!verifyWebhookRequest(req)) {
+      if (!(await verifyWebhookRequest(req))) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -170,7 +242,11 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
             pageContext: payload.pageContext,
             timestamp: payload.message.timestamp,
           },
-          { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 2000 },
+            jobId: makeJobId('intent', [payload.sessionId, payload.message.timestamp, payload.message.content]),
+          },
         );
 
         // Store funnel event
@@ -200,7 +276,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/chat-session-end',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      if (!verifyWebhookRequest(req)) {
+      if (!(await verifyWebhookRequest(req))) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -226,7 +302,11 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
       await queue.add(
         'score-lead',
         { sessionId: payload.sessionId, anonymousId: payload.anonymousId, userId: payload.userId },
-        { attempts: 3, backoff: { type: 'exponential', delay: 1000 } },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+          jobId: makeJobId('lead-score', [payload.sessionId, payload.durationSeconds, payload.messageCount]),
+        },
       );
 
       return reply.status(202).send({ accepted: true });
@@ -238,7 +318,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/page-view',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      if (!verifyWebhookRequest(req)) {
+      if (!(await verifyWebhookRequest(req))) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -274,7 +354,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/signup',
     { config: { rateLimit: { max: 200, timeWindow: '1 minute' } } },
     async (req, reply) => {
-      if (!verifyWebhookRequest(req)) {
+      if (!(await verifyWebhookRequest(req))) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -337,7 +417,11 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
           trigger: 'signup' as const,
           platform: 'meta',
         },
-        { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          jobId: makeJobId('audience-sync', [payload.anonymousId, payload.eventType, payload.email]),
+        },
       );
 
       return reply.status(202).send({ accepted: true });
@@ -349,7 +433,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/ad-click',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      if (!verifyWebhookRequest(req)) {
+      if (!(await verifyWebhookRequest(req))) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -382,7 +466,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     '/user-memory',
     { config: { rateLimit: rateLimitConfig } },
     async (req, reply) => {
-      if (!verifyWebhookRequest(req)) {
+      if (!(await verifyWebhookRequest(req))) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
@@ -444,6 +528,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
       const queue = getScraperEventQueue();
       await queue.add('scraper-event', parsed.data, {
         priority: 2,
+        jobId: makeJobId('scraper-event', [parsed.data.eventType, parsed.data.runId, parsed.data.significantChanges]),
       });
 
       return reply.status(202).send({ accepted: true, eventType: parsed.data.eventType });

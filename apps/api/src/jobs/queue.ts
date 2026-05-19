@@ -5,15 +5,20 @@
  * Each queue is returned as a singleton via a closure.
  *
  * Queues:
- *  intent-processing    — parse and store intent signals from chat messages
- *  lead-scoring         — score a session's engagement and intent
- *  audience-sync        — sync retargeting audiences to Meta / Google
- *  seo-content-gen      — generate AI content for SEO pages
- *  email-send           — send a single transactional or sequence email
- *  email-trigger        — evaluate whether to start an email sequence
- *  feedback-loop        — run a single feedback loop analysis step
- *  market-pulse         — hourly market data aggregation (Nexus agent)
- *  notification-push    — match trending data against user prefs, create alerts
+ *  intent-processing      — parse and store intent signals from chat messages
+ *  lead-scoring           — score a session's engagement and intent
+ *  audience-sync          — sync retargeting audiences to Meta / Google
+ *  seo-content-gen        — generate AI content for SEO pages
+ *  email-send             — send a single transactional or sequence email
+ *  email-trigger          — evaluate whether to start an email sequence
+ *  feedback-loop          — run a single feedback loop analysis step
+ *  market-pulse           — hourly market data aggregation (Nexus agent)
+ *  notification-push      — match trending data against user prefs, create alerts
+ *  reach-scan             — fan-out across Agent-Reach channels (RSS/web/Twitter/YT/LI)
+ *  reach-enrich           — enrich a contact profile after a reach-scan hit
+ *  outreach-send          — send a single outreach touchpoint
+ *  seo-batch-accumulator  — flush accumulated SEO tasks to Anthropic Batch API
+ *  embed-backfill         — backfill missing pgvector embeddings for properties/seo
  */
 
 import { Queue } from 'bullmq';
@@ -47,6 +52,12 @@ let seoIntelligenceQueue: Queue | null = null;
 let croAuditQueue: Queue | null = null;
 let contentOptimizationQueue: Queue | null = null;
 let scraperRefreshQueue: Queue | null = null;
+let reachScanQueue: Queue | null = null;
+let reachEnrichQueue: Queue | null = null;
+let outreachSendQueue: Queue | null = null;
+let seoBatchAccumulatorQueue: Queue | null = null;
+let embedBackfillQueue: Queue | null = null;
+let deadLetterQueue: Queue | null = null;
 
 // ── Factory functions ─────────────────────────────────────────────────────────
 
@@ -210,6 +221,79 @@ export function getScraperRefreshQueue(): Queue<ScraperRefreshJobData> {
   return scraperRefreshQueue as Queue<ScraperRefreshJobData>;
 }
 
+export function getReachScanQueue(): Queue<ReachScanJobData> {
+  if (!reachScanQueue) {
+    reachScanQueue = new Queue<ReachScanJobData>('reach-scan', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return reachScanQueue as Queue<ReachScanJobData>;
+}
+
+export function getReachEnrichQueue(): Queue<ReachEnrichJobData> {
+  if (!reachEnrichQueue) {
+    reachEnrichQueue = new Queue<ReachEnrichJobData>('reach-enrich', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return reachEnrichQueue as Queue<ReachEnrichJobData>;
+}
+
+export function getOutreachSendQueue(): Queue<OutreachSendJobData> {
+  if (!outreachSendQueue) {
+    outreachSendQueue = new Queue<OutreachSendJobData>('outreach-send', {
+      connection: getRedisOpts(),
+      ...defaultQueueOpts,
+    });
+  }
+  return outreachSendQueue as Queue<OutreachSendJobData>;
+}
+
+export function getSeoBatchAccumulatorQueue(): Queue<SeoBatchAccumulatorJobData> {
+  if (!seoBatchAccumulatorQueue) {
+    seoBatchAccumulatorQueue = new Queue<SeoBatchAccumulatorJobData>('seo-batch-accumulator', {
+      connection: getRedisOpts(),
+      defaultJobOptions: {
+        attempts: 1, // batch flushes are idempotent — no retry
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 200 },
+      },
+    });
+  }
+  return seoBatchAccumulatorQueue as Queue<SeoBatchAccumulatorJobData>;
+}
+
+export function getEmbedBackfillQueue(): Queue<EmbedBackfillJobData> {
+  if (!embedBackfillQueue) {
+    embedBackfillQueue = new Queue<EmbedBackfillJobData>('embed-backfill', {
+      connection: getRedisOpts(),
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 100 },
+      },
+    });
+  }
+  return embedBackfillQueue as Queue<EmbedBackfillJobData>;
+}
+
+export function getDeadLetterQueue(): Queue<DeadLetterJobData> {
+  if (!deadLetterQueue) {
+    deadLetterQueue = new Queue<DeadLetterJobData>('dead-letter', {
+      connection: getRedisOpts(),
+      defaultJobOptions: {
+        attempts: 1,
+        removeOnComplete: { count: 2000 },
+        removeOnFail: false,
+      },
+    });
+  }
+  return deadLetterQueue as Queue<DeadLetterJobData>;
+}
+
 // ── Close all queues ──────────────────────────────────────────────────────────
 
 export async function closeAllQueues(): Promise<void> {
@@ -231,6 +315,12 @@ export async function closeAllQueues(): Promise<void> {
       croAuditQueue,
       contentOptimizationQueue,
       scraperRefreshQueue,
+      reachScanQueue,
+      reachEnrichQueue,
+      outreachSendQueue,
+      seoBatchAccumulatorQueue,
+      embedBackfillQueue,
+      deadLetterQueue,
     ]
       .filter(Boolean)
       .map((q) => q!.close()),
@@ -370,4 +460,49 @@ export interface ScraperRefreshJobData {
   targetCompoundSlug?: string;
   triggeredBy?: string;
   priority?: 'normal' | 'high';
+}
+
+export interface ReachScanJobData {
+  query: string;
+  channels?: string[]; // defaults to all channels if omitted
+  limit?: number;
+  triggeredBy?: string;
+}
+
+export interface ReachEnrichJobData {
+  contactId: string;
+  platform: string;
+  handle: string;
+  /** Raw ReachItem metadata from the scan that found this contact */
+  sourceMetadata?: Record<string, unknown>;
+}
+
+export interface OutreachSendJobData {
+  campaignId: string;
+  contactId: string;
+  channel: 'email' | 'linkedin' | 'twitter';
+  touchpointId?: string;
+  messageTemplate?: string;
+}
+
+export interface SeoBatchAccumulatorJobData {
+  /** Flush reason — 'scheduled', 'threshold', or 'manual' */
+  reason: 'scheduled' | 'threshold' | 'manual';
+  triggeredBy?: string;
+}
+
+export interface EmbedBackfillJobData {
+  entity: 'properties' | 'seo' | 'all';
+  limit?: number;
+  triggeredBy?: string;
+}
+
+export interface DeadLetterJobData {
+  sourceQueue: string;
+  sourceJobId: string;
+  sourceJobName: string;
+  attemptsMade: number;
+  failedReason: string;
+  payload: Record<string, unknown>;
+  failedAt: string;
 }

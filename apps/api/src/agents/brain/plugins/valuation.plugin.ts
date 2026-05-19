@@ -3,6 +3,27 @@
  *
  * Uses DEVELOPERS (delivery rates, price/sqm, tier) and LOCATIONS (ROI data, yields)
  * to provide data-driven property valuations and investment analysis.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * DUAL-VALUATION ARCHITECTURE — read before changing pricing logic
+ * ─────────────────────────────────────────────────────────────────────────────
+ * There are TWO valuation paths in this repository, intentionally kept separate:
+ *
+ *   1. THIS FILE (Osool-orchestrator, TypeScript, Anthropic Claude)
+ *      Used by: the marketing/SEO chat agent on the public site.
+ *      Data source: hardcoded constants in @osool/shared (LOCATIONS, DEVELOPERS).
+ *      Strength: low-latency, no DB dependency, good for top-of-funnel chat.
+ *
+ *   2. Osool-Platform/backend/app/ai_engine/hybrid_brain_prod.py (Python, OpenAI GPT-4o)
+ *      Used by: the authenticated user dashboard (/api/ai/valuation, /api/ai/compare-price).
+ *      Data source: MLOps XGBoost endpoint + DB-backed Area/Developer tables.
+ *      Strength: real ML predictions, confidence bands, admin-editable inputs.
+ *
+ * The two MUST NOT be merged without a migration plan — they have different
+ * SLAs, billing, and authentication models. If outputs need to agree, prefer
+ * having the orchestrator call the Platform's /api/ai/valuation as the source
+ * of truth, rather than duplicating the inference logic here.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import Anthropic from '@anthropic-ai/sdk';

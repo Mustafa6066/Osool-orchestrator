@@ -7,6 +7,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getConfig } from '../config.js';
+import { getCircuitBreaker } from '@osool/shared';
+import { fetchWithRetry } from '../lib/http-resilience.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -33,6 +35,12 @@ const RELEVANCE_KEYWORDS = [
   'ras el hikma', 'ain sokhna', 'interest rate', 'mortgage', 'infrastructure',
 ];
 
+const trendScoutBreaker = getCircuitBreaker('trend-scout-http', {
+  failureThreshold: 4,
+  resetTimeoutMs: 45_000,
+  successThreshold: 2,
+});
+
 // ── Client ────────────────────────────────────────────────────────────────────
 
 let _client: Anthropic | null = null;
@@ -49,7 +57,9 @@ async function fetchGoogleTrendsEgypt(): Promise<TrendItem[]> {
   try {
     // Google Trends RSS feed for Egypt
     const url = 'https://trends.google.com/trending/rss?geo=EG';
-    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    const response = await trendScoutBreaker.execute(() =>
+      fetchWithRetry(url, { method: 'GET' }, { serviceName: 'trend_scout_google_trends', maxAttempts: 3, timeoutMs: 10_000 }),
+    );
     if (!response.ok) return [];
 
     const text = await response.text();
@@ -84,10 +94,13 @@ async function fetchRedditTrends(): Promise<TrendItem[]> {
   for (const sub of subreddits) {
     try {
       const url = `https://www.reddit.com/r/${sub}/hot.json?limit=10`;
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'Osool-TrendScout/1.0' },
-        signal: AbortSignal.timeout(10_000),
-      });
+      const response = await trendScoutBreaker.execute(() =>
+        fetchWithRetry(
+          url,
+          { headers: { 'User-Agent': 'Osool-TrendScout/1.0' } },
+          { serviceName: `trend_scout_reddit_${sub}`, maxAttempts: 3, timeoutMs: 10_000 },
+        ),
+      );
       if (!response.ok) continue;
 
       const data = (await response.json()) as {
@@ -118,15 +131,19 @@ async function fetchRedditTrends(): Promise<TrendItem[]> {
 
 async function fetchBraveNews(): Promise<TrendItem[]> {
   const config = getConfig();
-  if (!config.BRAVE_API_KEY) return [];
+  const braveApiKey = config.BRAVE_API_KEY;
+  if (!braveApiKey) return [];
 
   try {
     const query = encodeURIComponent('Egypt real estate market news 2025');
     const url = `https://api.search.brave.com/res/v1/news/search?q=${query}&count=10`;
-    const response = await fetch(url, {
-      headers: { 'X-Subscription-Token': config.BRAVE_API_KEY, Accept: 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const response = await trendScoutBreaker.execute(() =>
+      fetchWithRetry(
+        url,
+        { headers: { 'X-Subscription-Token': braveApiKey, Accept: 'application/json' } },
+        { serviceName: 'trend_scout_brave_news', maxAttempts: 3, timeoutMs: 10_000 },
+      ),
+    );
     if (!response.ok) return [];
 
     const data = (await response.json()) as {

@@ -30,7 +30,18 @@ export const chatMessages = pgTable('chat_messages', {
   intentEntities: jsonb('intent_entities').$type<Record<string, unknown>>(),
   tokensUsed: integer('tokens_used'),
   latencyMs: integer('latency_ms'),
+  /**
+   * MemPalace drawer ID — set after the message is persisted to MemPalace.
+   * Enables cross-table joins from SQL to the ChromaDB vector store.
+   */
+  memoryDrawerId: varchar('memory_drawer_id', { length: 64 }),
+  /**
+   * Array of MemPalace drawer IDs that were recalled BEFORE generating this
+   * assistant response. Provides an audit trail for memory-augmented replies.
+   */
+  memoryRecallIds: jsonb('memory_recall_ids').$type<string[]>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index('idx_chat_messages_session').on(table.sessionId),
+  index('idx_chat_messages_drawer').on(table.memoryDrawerId),
 ]);

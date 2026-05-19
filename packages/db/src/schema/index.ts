@@ -28,6 +28,9 @@ export {
 } from './funnel.js';
 export { experiments } from './experiments.js';
 export { croAudits } from './cro-audits.js';
+export { memoryIndex } from './memory.js';
+export { contacts, outreachCampaigns, outreachTouchpoints } from './outreach.js';
+export { skills } from './skills.js';
 export {
   reasoningChains,
   llmCostLog,

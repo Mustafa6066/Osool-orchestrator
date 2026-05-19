@@ -7,6 +7,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getConfig } from '../config.js';
+import { getCircuitBreaker } from '@osool/shared';
+import { fetchWithRetry } from '../lib/http-resilience.js';
 
 // ── Types (re-exported from shared for service use) ──────────────────────────
 
@@ -45,6 +47,12 @@ export interface CROAuditOutput {
 // ── Client ────────────────────────────────────────────────────────────────────
 
 let _client: Anthropic | null = null;
+const croAuditBreaker = getCircuitBreaker('cro-audit-http', {
+  failureThreshold: 3,
+  resetTimeoutMs: 60_000,
+  successThreshold: 2,
+});
+
 function getClient(): Anthropic {
   if (!_client) {
     _client = new Anthropic({ apiKey: getConfig().ANTHROPIC_API_KEY });
@@ -61,10 +69,13 @@ export async function auditPage(url: string, pageType: string): Promise<CROAudit
   // Fetch the page HTML
   let html: string;
   try {
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Osool-CRO-Audit/1.0' },
-      signal: AbortSignal.timeout(15_000),
-    });
+    const response = await croAuditBreaker.execute(() =>
+      fetchWithRetry(
+        url,
+        { headers: { 'User-Agent': 'Osool-CRO-Audit/1.0' } },
+        { serviceName: 'cro_audit_page_fetch', maxAttempts: 3, timeoutMs: 15_000 },
+      ),
+    );
     if (!response.ok) {
       throw new Error(`Failed to fetch ${url}: ${response.status}`);
     }
